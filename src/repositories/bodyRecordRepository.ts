@@ -1,4 +1,5 @@
-import { getDatabase } from '../database/client';
+import { createLocalId, readBrowserData, writeBrowserData } from '../database/browserStorage';
+import { getDatabase, isTauriRuntime } from '../database/client';
 
 export interface BodyRecord {
   id: string;
@@ -52,8 +53,20 @@ function mapRow(row: Record<string, unknown>): BodyRecord {
   };
 }
 
+function browserRecords(): BodyRecord[] {
+  return readBrowserData<BodyRecord[]>('body-records', []);
+}
+
+function sortRecords(records: BodyRecord[]): BodyRecord[] {
+  return [...records].sort((left, right) =>
+    right.recordedDate.localeCompare(left.recordedDate)
+      || right.updatedAt.localeCompare(left.updatedAt));
+}
+
 export const bodyRecordRepository = {
   async getAll(): Promise<BodyRecord[]> {
+    if (!isTauriRuntime()) return sortRecords(browserRecords());
+
     const db = await getDatabase();
     const rows = await db.select<Array<Record<string, unknown>>>(
       'SELECT * FROM body_records ORDER BY recorded_date DESC',
@@ -63,8 +76,30 @@ export const bodyRecordRepository = {
 
   async save(input: BodyRecordInput): Promise<BodyRecord> {
     validate(input);
-    const db = await getDatabase();
     const now = new Date().toISOString();
+
+    if (!isTauriRuntime()) {
+      const records = browserRecords();
+      const existing = records.find((record) => record.recordedDate === input.recordedDate);
+      const saved: BodyRecord = {
+        id: existing?.id ?? createLocalId('body'),
+        recordedDate: input.recordedDate,
+        weight: input.weight,
+        bodyFat: input.bodyFat ?? null,
+        muscleMass: input.muscleMass ?? null,
+        waist: input.waist ?? null,
+        note: input.note?.trim() || null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      writeBrowserData('body-records', sortRecords([
+        ...records.filter((record) => record.recordedDate !== input.recordedDate),
+        saved,
+      ]));
+      return saved;
+    }
+
+    const db = await getDatabase();
     const id = crypto.randomUUID();
     await db.execute(
       `INSERT INTO body_records(
@@ -98,6 +133,11 @@ export const bodyRecordRepository = {
   },
 
   async remove(id: string): Promise<void> {
+    if (!isTauriRuntime()) {
+      writeBrowserData('body-records', browserRecords().filter((record) => record.id !== id));
+      return;
+    }
+
     const db = await getDatabase();
     await db.execute('DELETE FROM body_records WHERE id = ?', [id]);
   },

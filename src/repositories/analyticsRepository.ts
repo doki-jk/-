@@ -1,4 +1,6 @@
-import { getDatabase } from '../database/client';
+import { localDateKey } from '../database/browserStorage';
+import { getDatabase, isTauriRuntime } from '../database/client';
+import { mealRepository } from './mealRepository';
 
 export interface DailyNutritionPoint {
   date: string;
@@ -30,6 +32,18 @@ export const analyticsRepository = {
     assertDate(endDate, '结束日期');
     if (startDate > endDate) throw new Error('开始日期不能晚于结束日期');
 
+    if (!isTauriRuntime()) {
+      const start = new Date(`${startDate}T12:00:00`);
+      const end = new Date(`${endDate}T12:00:00`);
+      const points: DailyNutritionPoint[] = [];
+      for (const current = new Date(start); current <= end; current.setDate(current.getDate() + 1)) {
+        const date = localDateKey(current);
+        const summary = await mealRepository.getDailySummary(date);
+        points.push({ date, ...summary });
+      }
+      return points;
+    }
+
     const db = await getDatabase();
     const rows = await db.select<DailyNutritionPoint[]>(
       `SELECT
@@ -53,21 +67,14 @@ export const analyticsRepository = {
     const start = new Date(end);
     start.setDate(start.getDate() - 6);
 
-    const key = (date: Date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    const values = await this.getDailyNutrition(key(start), key(end));
+    const values = await this.getDailyNutrition(localDateKey(start), localDateKey(end));
     const byDate = new Map(values.map((item) => [item.date, item]));
     const result: DailyNutritionPoint[] = [];
 
     for (let index = 0; index < 7; index += 1) {
       const date = new Date(start);
       date.setDate(start.getDate() + index);
-      const dateKey = key(date);
+      const dateKey = localDateKey(date);
       result.push(
         byDate.get(dateKey) ?? {
           date: dateKey,

@@ -11,7 +11,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { isTauriRuntime } from '../database/client';
 import { analyticsRepository, type DailyNutritionPoint } from '../repositories/analyticsRepository';
 import { bodyRecordRepository, type BodyRecord } from '../repositories/bodyRecordRepository';
 import '../analysis.css';
@@ -27,13 +26,6 @@ export function DataAnalysis() {
   useEffect(() => {
     let active = true;
     async function load() {
-      if (!isTauriRuntime()) {
-        if (active) {
-          setMessage('浏览器预览不会读取本机数据库，请在桌面版查看真实分析。');
-          setLoading(false);
-        }
-        return;
-      }
       try {
         const [nutritionPoints, records] = await Promise.all([
           analyticsRepository.getLastSevenDays(),
@@ -42,6 +34,7 @@ export function DataAnalysis() {
         if (active) {
           setNutrition(nutritionPoints);
           setBodyRecords(records.slice(0, 30).reverse());
+          setMessage('');
         }
       } catch (error) {
         if (active) setMessage(error instanceof Error ? error.message : '读取分析数据失败');
@@ -82,7 +75,7 @@ export function DataAnalysis() {
       <div className="settings-heading">
         <p className="eyebrow">趋势与复盘</p>
         <h1>数据分析</h1>
-        <p>根据本机 SQLite 中的饮食与身体记录，查看最近趋势和记录完整度。</p>
+        <p>根据当前设备中保存的饮食与身体记录，查看最近趋势和记录完整度。</p>
       </div>
 
       {message && <p className="data-status" role="status">{message}</p>}

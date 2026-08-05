@@ -1,4 +1,10 @@
-import { getDatabase } from '../database/client';
+import {
+  createLocalId,
+  localDateKeyFromIso,
+  readBrowserData,
+  writeBrowserData,
+} from '../database/browserStorage';
+import { getDatabase, isTauriRuntime } from '../database/client';
 import type { MealType } from '../types';
 
 export interface MealEntry {
@@ -67,7 +73,7 @@ function mapRow(row: MealEntryRow): MealEntry {
     carbs: row.carbs,
     fat: row.fat,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
   };
 }
 
@@ -77,50 +83,109 @@ function validate(input: CreateMealEntryInput): void {
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('数量必须大于 0');
   if (Number.isNaN(Date.parse(input.consumedAt))) throw new Error('食用时间无效');
   for (const [label, value] of [
-    ['热量', input.calories], ['蛋白质', input.protein], ['碳水', input.carbs], ['脂肪', input.fat]
+    ['热量', input.calories],
+    ['蛋白质', input.protein],
+    ['碳水', input.carbs],
+    ['脂肪', input.fat],
   ] as const) {
     if (!Number.isFinite(value) || value < 0) throw new Error(`${label}不能为负数`);
   }
 }
 
+function assertDateKey(date: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00`))) {
+    throw new Error('日期格式必须为 YYYY-MM-DD');
+  }
+}
+
 function dayRange(date: string): [string, string] {
+  assertDateKey(date);
   const start = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(start.getTime())) throw new Error('日期格式必须为 YYYY-MM-DD');
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
   return [start.toISOString(), end.toISOString()];
 }
 
+function browserEntries(): MealEntry[] {
+  return readBrowserData<MealEntry[]>('meal-entries', []);
+}
+
+function sortEntries(entries: MealEntry[]): MealEntry[] {
+  return [...entries].sort((left, right) =>
+    left.consumedAt.localeCompare(right.consumedAt)
+      || left.createdAt.localeCompare(right.createdAt));
+}
+
 export const mealRepository = {
   async getByDate(date: string): Promise<MealEntry[]> {
+    assertDateKey(date);
+
+    if (!isTauriRuntime()) {
+      return sortEntries(browserEntries().filter((entry) => localDateKeyFromIso(entry.consumedAt) === date));
+    }
+
     const db = await getDatabase();
     const [start, end] = dayRange(date);
     const rows = await db.select<MealEntryRow[]>(
       `SELECT * FROM meal_entries
        WHERE consumed_at >= ? AND consumed_at < ?
        ORDER BY consumed_at ASC, created_at ASC`,
-      [start, end]
+      [start, end],
     );
     return rows.map(mapRow);
   },
 
   async add(input: CreateMealEntryInput): Promise<MealEntry> {
     validate(input);
+    const now = new Date().toISOString();
+
+    if (!isTauriRuntime()) {
+      const entry: MealEntry = {
+        id: createLocalId('meal'),
+        foodId: input.foodId ?? null,
+        foodName: input.foodName.trim(),
+        mealType: input.mealType,
+        consumedAt: input.consumedAt,
+        amount: input.amount,
+        unit: input.unit.trim(),
+        calories: input.calories,
+        protein: input.protein,
+        carbs: input.carbs,
+        fat: input.fat,
+        createdAt: now,
+        updatedAt: now,
+      };
+      writeBrowserData('meal-entries', [...browserEntries(), entry]);
+      return entry;
+    }
+
     const db = await getDatabase();
     const id = crypto.randomUUID();
-    const now = new Date().toISOString();
     await db.execute(
       `INSERT INTO meal_entries(
         id,food_id,food_name,meal_type,consumed_at,amount,unit,
         calories,protein,carbs,fat,created_at,updated_at
       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [id,input.foodId ?? null,input.foodName.trim(),input.mealType,input.consumedAt,
-       input.amount,input.unit.trim(),input.calories,input.protein,input.carbs,input.fat,now,now]
+      [
+        id,
+        input.foodId ?? null,
+        input.foodName.trim(),
+        input.mealType,
+        input.consumedAt,
+        input.amount,
+        input.unit.trim(),
+        input.calories,
+        input.protein,
+        input.carbs,
+        input.fat,
+        now,
+        now,
+      ],
     );
     if (input.foodId) {
       await db.execute(
         'UPDATE foods SET usage_count = usage_count + 1, updated_at = ? WHERE id = ?',
-        [now, input.foodId]
+        [now, input.foodId],
       );
     }
     const rows = await db.select<MealEntryRow[]>('SELECT * FROM meal_entries WHERE id = ?', [id]);
@@ -129,11 +194,26 @@ export const mealRepository = {
   },
 
   async remove(id: string): Promise<void> {
+    if (!isTauriRuntime()) {
+      writeBrowserData('meal-entries', browserEntries().filter((entry) => entry.id !== id));
+      return;
+    }
+
     const db = await getDatabase();
     await db.execute('DELETE FROM meal_entries WHERE id = ?', [id]);
   },
 
   async getDailySummary(date: string): Promise<DailyNutritionSummary> {
+    if (!isTauriRuntime()) {
+      const entries = await this.getByDate(date);
+      return entries.reduce<DailyNutritionSummary>((total, entry) => ({
+        calories: total.calories + entry.calories,
+        protein: total.protein + entry.protein,
+        carbs: total.carbs + entry.carbs,
+        fat: total.fat + entry.fat,
+      }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+    }
+
     const db = await getDatabase();
     const [start, end] = dayRange(date);
     const rows = await db.select<DailyNutritionSummary[]>(
@@ -142,7 +222,7 @@ export const mealRepository = {
               COALESCE(SUM(carbs),0) AS carbs,
               COALESCE(SUM(fat),0) AS fat
        FROM meal_entries WHERE consumed_at >= ? AND consumed_at < ?`,
-      [start, end]
+      [start, end],
     );
     return rows[0] ?? { calories: 0, protein: 0, carbs: 0, fat: 0 };
   },
@@ -163,10 +243,10 @@ export const mealRepository = {
         calories: entry.calories,
         protein: entry.protein,
         carbs: entry.carbs,
-        fat: entry.fat
+        fat: entry.fat,
       });
       copied += 1;
     }
     return copied;
-  }
+  },
 };

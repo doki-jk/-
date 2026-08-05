@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, Plus, Trash2 } from 'lucide-react';
-import { isTauriRuntime } from '../database/client';
 import { bodyRecordRepository, type BodyRecord } from '../repositories/bodyRecordRepository';
 import './bodyData.css';
 
@@ -21,10 +20,7 @@ export function BodyData() {
   const [message, setMessage] = useState('');
 
   async function load() {
-    if (!isTauriRuntime()) {
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
     try {
       setRecords(await bodyRecordRepository.getAll());
     } catch (error) {
@@ -54,10 +50,9 @@ export function BodyData() {
         waist: optionalNumber(form, 'waist'),
         note: String(form.get('note') ?? ''),
       };
-      if (!isTauriRuntime()) throw new Error('浏览器预览不会写入数据库，请在桌面版中记录');
       await bodyRecordRepository.save(input);
       await load();
-      setMessage('身体数据已保存');
+      setMessage('身体数据已保存到当前设备');
       formElement.reset();
       const dateInput = formElement.elements.namedItem('recordedDate') as HTMLInputElement | null;
       if (dateInput) dateInput.value = localDateKey();

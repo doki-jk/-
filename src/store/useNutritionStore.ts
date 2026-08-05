@@ -1,7 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { initialFoods } from '../data/mock';
-import { isTauriRuntime } from '../database/client';
 import { goalRepository, type DayType } from '../repositories/goalRepository';
 import { mealRepository } from '../repositories/mealRepository';
 import type { DailyGoal, FoodEntry } from '../types';
@@ -59,7 +57,7 @@ function toFoodEntry(entry: Awaited<ReturnType<typeof mealRepository.add>>): Foo
 export const useNutritionStore = create<State>()(
   persist(
     (set, get) => ({
-      foods: initialFoods,
+      foods: [],
       goal: goalRepository.defaults.training,
       trainingDay: true,
       selectedDate: localDateKey(),
@@ -78,28 +76,10 @@ export const useNutritionStore = create<State>()(
           return;
         }
 
-        if (!isTauriRuntime()) {
-          set({ selectedDate: date, error: null });
-          return;
-        }
-
         set({ selectedDate: date, loading: true, error: null });
         try {
           const entries = await mealRepository.getByDate(date);
-          set({
-            foods: entries.map((entry) => ({
-              id: entry.id,
-              name: entry.foodName,
-              meal: entry.mealType,
-              amount: entry.amount,
-              unit: entry.unit,
-              calories: entry.calories,
-              protein: entry.protein,
-              carbs: entry.carbs,
-              fat: entry.fat,
-            })),
-            loading: false,
-          });
+          set({ foods: entries.map(toFoodEntry), loading: false });
         } catch (error) {
           set({
             loading: false,
@@ -110,10 +90,6 @@ export const useNutritionStore = create<State>()(
 
       loadGoal: async () => {
         const dayType: DayType = get().trainingDay ? 'training' : 'rest';
-        if (!isTauriRuntime()) {
-          set({ goal: goalRepository.defaults[dayType], error: null });
-          return;
-        }
         try {
           set({ goal: await goalRepository.get(dayType), error: null });
         } catch (error) {
@@ -122,16 +98,16 @@ export const useNutritionStore = create<State>()(
       },
 
       saveGoal: async (dayType, goal) => {
-        if (isTauriRuntime()) await goalRepository.save(dayType, goal);
-        if ((dayType === 'training') === get().trainingDay) set({ goal, error: null });
+        try {
+          await goalRepository.save(dayType, goal);
+          if ((dayType === 'training') === get().trainingDay) set({ goal, error: null });
+        } catch (error) {
+          set({ error: error instanceof Error ? error.message : '保存营养目标失败' });
+          throw error;
+        }
       },
 
       addFood: async (food) => {
-        if (!isTauriRuntime()) {
-          set((state) => ({ foods: [...state.foods, food], error: null }));
-          return;
-        }
-
         set({ error: null });
         try {
           const saved = await mealRepository.add({
@@ -153,11 +129,6 @@ export const useNutritionStore = create<State>()(
       },
 
       removeFood: async (id) => {
-        if (!isTauriRuntime()) {
-          set((state) => ({ foods: state.foods.filter((food) => food.id !== id), error: null }));
-          return;
-        }
-
         set({ error: null });
         try {
           await mealRepository.remove(id);
@@ -171,12 +142,9 @@ export const useNutritionStore = create<State>()(
       toggleTrainingDay: async () => {
         const trainingDay = !get().trainingDay;
         const dayType: DayType = trainingDay ? 'training' : 'rest';
-        set({ trainingDay, error: null });
         try {
-          const goal = isTauriRuntime()
-            ? await goalRepository.get(dayType)
-            : goalRepository.defaults[dayType];
-          set({ goal });
+          const goal = await goalRepository.get(dayType);
+          set({ trainingDay, goal, error: null });
         } catch (error) {
           set({ error: error instanceof Error ? error.message : '切换营养目标失败' });
         }
@@ -184,7 +152,7 @@ export const useNutritionStore = create<State>()(
     }),
     {
       name: 'fuellog-nutrition',
-      partialize: ({ foods, goal, trainingDay }) => ({ foods, goal, trainingDay }),
+      partialize: ({ trainingDay, selectedDate }) => ({ trainingDay, selectedDate }),
     },
   ),
 );

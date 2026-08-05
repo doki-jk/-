@@ -1,4 +1,5 @@
-import { getDatabase } from '../database/client';
+import { readBrowserData, writeBrowserData } from '../database/browserStorage';
+import { getDatabase, isTauriRuntime } from '../database/client';
 import type { DailyGoal } from '../types';
 
 export type DayType = 'training' | 'rest';
@@ -28,10 +29,16 @@ function validate(goal: DailyGoal): void {
   if (goal.calories <= 0) throw new Error('热量目标必须大于 0');
 }
 
+function browserGoals(): Record<DayType, DailyGoal> {
+  return readBrowserData('goals', defaults);
+}
+
 export const goalRepository = {
   defaults,
 
   async get(dayType: DayType): Promise<DailyGoal> {
+    if (!isTauriRuntime()) return browserGoals()[dayType] ?? defaults[dayType];
+
     const db = await getDatabase();
     const rows = await db.select<GoalRow[]>(
       `SELECT calories, protein, carbs, fat
@@ -46,6 +53,13 @@ export const goalRepository = {
 
   async save(dayType: DayType, goal: DailyGoal): Promise<void> {
     validate(goal);
+
+    if (!isTauriRuntime()) {
+      const goals = browserGoals();
+      writeBrowserData('goals', { ...goals, [dayType]: { ...goal } });
+      return;
+    }
+
     const db = await getDatabase();
     const now = new Date().toISOString();
     await db.execute('BEGIN IMMEDIATE');

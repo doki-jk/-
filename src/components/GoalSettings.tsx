@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Dumbbell, Moon, Save } from 'lucide-react';
-import { isTauriRuntime } from '../database/client';
 import { goalRepository, type DayType } from '../repositories/goalRepository';
 import { useNutritionStore } from '../store/useNutritionStore';
 import type { DailyGoal } from '../types';
@@ -23,10 +22,10 @@ function GoalForm({ dayType, title }: { dayType: DayType; title: string }) {
   useEffect(() => {
     let active = true;
     async function load() {
+      setLoading(true);
+      setMessage('');
       try {
-        const goal = isTauriRuntime()
-          ? await goalRepository.get(dayType)
-          : goalRepository.defaults[dayType];
+        const goal = await goalRepository.get(dayType);
         if (active) setValue(goal);
       } catch (error) {
         if (active) setMessage(error instanceof Error ? error.message : '读取目标失败');
@@ -44,7 +43,7 @@ function GoalForm({ dayType, title }: { dayType: DayType; title: string }) {
     setMessage('');
     try {
       await saveGoal(dayType, value);
-      setMessage('已保存');
+      setMessage('目标已保存到当前设备');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '保存失败');
     } finally {

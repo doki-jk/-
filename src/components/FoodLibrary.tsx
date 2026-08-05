@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Star, Trash2 } from 'lucide-react';
-import { isTauriRuntime } from '../database/client';
 import {
   foodRepository,
   type CreateFoodInput,
@@ -32,11 +31,7 @@ export function FoodLibrary() {
   const [message, setMessage] = useState('');
 
   async function load() {
-    if (!isTauriRuntime()) {
-      setLoading(false);
-      setMessage('浏览器预览不会读取本机食物库，请在桌面版使用。');
-      return;
-    }
+    setLoading(true);
     try {
       const result = favoritesOnly
         ? await foodRepository.getFavorites()
@@ -81,11 +76,10 @@ export function FoodLibrary() {
     setSaving(true);
     setMessage('');
     try {
-      if (!isTauriRuntime()) throw new Error('请在桌面版添加自定义食物');
       await foodRepository.create(input);
       formElement.reset();
       await load();
-      setMessage('自定义食物已保存');
+      setMessage('自定义食物已保存到当前设备');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '保存食物失败');
     } finally {
