@@ -3,11 +3,13 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { isTauriRuntime } from './database/client';
 import { initializeDatabase } from './database/migrations';
+import { seedDatabase } from './database/seed';
 
 async function bootstrap(): Promise<void> {
   if (isTauriRuntime()) {
     try {
       await initializeDatabase();
+      await seedDatabase();
     } catch (error) {
       console.error('FuelLog 数据库初始化失败', error);
     }
