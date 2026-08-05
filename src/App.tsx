@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { BodyData } from './components/BodyData';
 import { GoalSettings } from './components/GoalSettings';
 import { ProgressCard } from './components/ProgressCard';
 import { weeklyCalories } from './data/mock';
@@ -40,19 +41,11 @@ const meals: MealType[] = ['早餐', '午餐', '晚餐', '加餐'];
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 });
 
 function localDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function dateLabel(date: string) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long',
-  }).format(new Date(`${date}T12:00:00`));
+  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date(`${date}T12:00:00`));
 }
 
 function createId() {
@@ -81,41 +74,27 @@ export default function App() {
 
   const isToday = selectedDate === localDateKey();
   const recordLabel = isToday ? '今天' : dateLabel(selectedDate).replace(/星期.*/, '').trim();
-  const showDashboard = active !== '目标设置';
+  const showDashboard = active !== '目标设置' && active !== '身体数据';
 
   async function refreshAnalytics() {
     if (!isTauriRuntime()) return;
     try {
       const points = await analyticsRepository.getLastSevenDays();
       const formatter = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' });
-      setChartData(
-        points.map((point) => ({
-          day: formatter.format(new Date(`${point.date}T12:00:00`)),
-          value: point.calories,
-        })),
-      );
+      setChartData(points.map((point) => ({ day: formatter.format(new Date(`${point.date}T12:00:00`)), value: point.calories })));
     } catch (analyticsError) {
       console.error('读取营养趋势失败', analyticsError);
     }
   }
 
-  useEffect(() => {
-    void refreshAnalytics();
-  }, []);
+  useEffect(() => { void refreshAnalytics(); }, []);
 
-  const totals = useMemo(
-    () =>
-      foods.reduce(
-        (total, food) => ({
-          calories: total.calories + food.calories,
-          protein: total.protein + food.protein,
-          carbs: total.carbs + food.carbs,
-          fat: total.fat + food.fat,
-        }),
-        { calories: 0, protein: 0, carbs: 0, fat: 0 },
-      ),
-    [foods],
-  );
+  const totals = useMemo(() => foods.reduce((total, food) => ({
+    calories: total.calories + food.calories,
+    protein: total.protein + food.protein,
+    carbs: total.carbs + food.carbs,
+    fat: total.fat + food.fat,
+  }), { calories: 0, protein: 0, carbs: 0, fat: 0 }), [foods]);
 
   const caloriePercent = goal.calories > 0 ? Math.round((totals.calories / goal.calories) * 100) : 0;
 
@@ -141,16 +120,9 @@ export default function App() {
       carbs: numeric('carbs'),
       fat: numeric('fat'),
     };
-
     const values = [entry.amount, entry.calories, entry.protein, entry.carbs, entry.fat];
-    if (!entry.name) {
-      setFormError('请输入食物名称。');
-      return;
-    }
-    if (values.some((value) => !Number.isFinite(value) || value < 0) || entry.amount <= 0) {
-      setFormError('数量必须大于 0，营养数据不能为负数。');
-      return;
-    }
+    if (!entry.name) return setFormError('请输入食物名称。');
+    if (values.some((value) => !Number.isFinite(value) || value < 0) || entry.amount <= 0) return setFormError('数量必须大于 0，营养数据不能为负数。');
 
     setSaving(true);
     setFormError('');
@@ -171,60 +143,34 @@ export default function App() {
       await removeFood(id);
       await refreshAnalytics();
     } catch {
-      // Store 会在页面顶部显示具体错误。
+      // Store 会显示具体错误。
     }
   }
 
   async function addPostWorkoutSnack() {
     try {
-      await addFood({
-        id: createId(),
-        name: '蛋白粉 + 香蕉',
-        meal: '加餐',
-        amount: 1,
-        unit: '份',
-        calories: 225,
-        protein: 26,
-        carbs: 29,
-        fat: 2,
-      });
+      await addFood({ id: createId(), name: '蛋白粉 + 香蕉', meal: '加餐', amount: 1, unit: '份', calories: 225, protein: 26, carbs: 29, fat: 2 });
       await refreshAnalytics();
     } catch {
-      // Store 会在页面顶部显示具体错误。
+      // Store 会显示具体错误。
     }
   }
 
   return (
     <div className="app-shell">
       <aside>
-        <div className="brand">
-          <div className="brand-mark"><Dumbbell size={22} /></div>
-          <div><strong>FuelLog</strong><span>训练营养助手</span></div>
-        </div>
-        <nav>
-          {nav.map(([label, Icon]) => (
-            <button key={label} className={active === label ? 'active' : ''} onClick={() => setActive(label)}>
-              <Icon size={18} />{label}
-            </button>
-          ))}
-        </nav>
-        <div className="profile">
-          <div className="avatar"><UserRound size={20} /></div>
-          <div><strong>健身达人</strong><span>增肌计划</span></div>
-          <Settings size={17} />
-        </div>
+        <div className="brand"><div className="brand-mark"><Dumbbell size={22} /></div><div><strong>FuelLog</strong><span>训练营养助手</span></div></div>
+        <nav>{nav.map(([label, Icon]) => <button key={label} className={active === label ? 'active' : ''} onClick={() => { setActive(label); setModalOpen(false); }}><Icon size={18} />{label}</button>)}</nav>
+        <div className="profile"><div className="avatar"><UserRound size={20} /></div><div><strong>健身达人</strong><span>增肌计划</span></div><Settings size={17} /></div>
       </aside>
 
       <main>
-        {showDashboard ? (
+        {active === '目标设置' ? <GoalSettings /> : active === '身体数据' ? <BodyData /> : showDashboard ? (
           <>
             <header>
               <div><p className="eyebrow">{dateLabel(selectedDate)}</p><h1>{isToday ? '今天继续稳步完成营养目标。' : `查看 ${recordLabel} 的饮食记录。`}</h1></div>
               <div className="header-actions">
-                <label className="date-picker" aria-label="选择记录日期">
-                  <CalendarDays size={17} />
-                  <input type="date" value={selectedDate} disabled={loading || saving} onChange={(event) => void loadDate(event.target.value)} />
-                </label>
+                <label className="date-picker" aria-label="选择记录日期"><CalendarDays size={17} /><input type="date" value={selectedDate} disabled={loading || saving} onChange={(event) => void loadDate(event.target.value)} /></label>
                 {!isToday && <button className="ghost" disabled={loading || saving} onClick={() => void loadDate(localDateKey())}>返回今天</button>}
                 <button className="day-toggle" onClick={() => void toggleTrainingDay()}><Dumbbell size={17} />{trainingDay ? '训练日' : '休息日'}</button>
                 <button className="primary" disabled={loading} onClick={() => openFoodModal()}><Plus size={18} />记录饮食</button>
@@ -234,98 +180,35 @@ export default function App() {
             {error && <p className="form-error" role="alert">数据操作失败：{error}</p>}
             {loading && <p className="data-status" role="status">正在读取 {recordLabel} 的饮食记录…</p>}
 
-            <section className="hero">
-              <div>
-                <span>{recordLabel}热量</span>
-                <strong>{numberFormat.format(totals.calories)} <small>/ {goal.calories} kcal</small></strong>
-                <p>{totals.calories <= goal.calories ? `还可摄入 ${numberFormat.format(goal.calories - totals.calories)} kcal` : `已超出 ${numberFormat.format(totals.calories - goal.calories)} kcal`}</p>
-              </div>
-              <div className="hero-ring" style={{ '--progress': `${Math.min(100, Math.max(0, caloriePercent)) * 3.6}deg` } as React.CSSProperties}>
-                <span>{caloriePercent}%</span>
-              </div>
-            </section>
+            <section className="hero"><div><span>{recordLabel}热量</span><strong>{numberFormat.format(totals.calories)} <small>/ {goal.calories} kcal</small></strong><p>{totals.calories <= goal.calories ? `还可摄入 ${numberFormat.format(goal.calories - totals.calories)} kcal` : `已超出 ${numberFormat.format(totals.calories - goal.calories)} kcal`}</p></div><div className="hero-ring" style={{ '--progress': `${Math.min(100, Math.max(0, caloriePercent)) * 3.6}deg` } as React.CSSProperties}><span>{caloriePercent}%</span></div></section>
 
-            <section className="macro-grid">
-              <ProgressCard label="蛋白质" value={totals.protein} target={goal.protein} unit="g" />
-              <ProgressCard label="碳水化合物" value={totals.carbs} target={goal.carbs} unit="g" />
-              <ProgressCard label="脂肪" value={totals.fat} target={goal.fat} unit="g" />
-            </section>
+            <section className="macro-grid"><ProgressCard label="蛋白质" value={totals.protein} target={goal.protein} unit="g" /><ProgressCard label="碳水化合物" value={totals.carbs} target={goal.carbs} unit="g" /><ProgressCard label="脂肪" value={totals.fat} target={goal.fat} unit="g" /></section>
 
             <div className="content-grid">
               <section className="panel meals-panel">
-                <div className="panel-title">
-                  <div><p className="eyebrow">{recordLabel}的记录</p><h2>饮食明细</h2></div>
-                  <button className="ghost" disabled={loading} onClick={() => openFoodModal()}><Search size={17} />添加食物</button>
-                </div>
+                <div className="panel-title"><div><p className="eyebrow">{recordLabel}的记录</p><h2>饮食明细</h2></div><button className="ghost" disabled={loading} onClick={() => openFoodModal()}><Search size={17} />添加食物</button></div>
                 {meals.map((meal) => {
                   const mealFoods = foods.filter((food) => food.meal === meal);
-                  return (
-                    <div className="meal" key={meal}>
-                      <div className="meal-head">
-                        <div><span className="meal-icon"><Apple size={16} /></span><strong>{meal}</strong></div>
-                        <span>{numberFormat.format(mealFoods.reduce((sum, food) => sum + food.calories, 0))} kcal</span>
-                      </div>
-                      {mealFoods.length === 0 ? (
-                        <button className="empty-add" disabled={loading} onClick={() => openFoodModal(meal)}><Plus size={16} />添加{meal}</button>
-                      ) : mealFoods.map((food) => (
-                        <div className="food-row" key={food.id}>
-                          <div><strong>{food.name}</strong><span>{numberFormat.format(food.amount)}{food.unit} · 蛋白质 {numberFormat.format(food.protein)}g</span></div>
-                          <div><strong>{numberFormat.format(food.calories)} kcal</strong><button aria-label={`删除${food.name}`} onClick={() => void deleteFood(food.id)}><Trash2 size={15} /></button></div>
-                        </div>
-                      ))}
-                    </div>
-                  );
+                  return <div className="meal" key={meal}><div className="meal-head"><div><span className="meal-icon"><Apple size={16} /></span><strong>{meal}</strong></div><span>{numberFormat.format(mealFoods.reduce((sum, food) => sum + food.calories, 0))} kcal</span></div>{mealFoods.length === 0 ? <button className="empty-add" disabled={loading} onClick={() => openFoodModal(meal)}><Plus size={16} />添加{meal}</button> : mealFoods.map((food) => <div className="food-row" key={food.id}><div><strong>{food.name}</strong><span>{numberFormat.format(food.amount)}{food.unit} · 蛋白质 {numberFormat.format(food.protein)}g</span></div><div><strong>{numberFormat.format(food.calories)} kcal</strong><button aria-label={`删除${food.name}`} onClick={() => void deleteFood(food.id)}><Trash2 size={15} /></button></div></div>)}</div>;
                 })}
               </section>
 
               <aside className="right-column">
-                <section className="panel">
-                  <div className="panel-title compact"><div><p className="eyebrow">最近 7 天</p><h2>真实热量趋势</h2></div><ChevronRight size={18} /></div>
-                  <div className="chart">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData}>
-                        <defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="currentColor" stopOpacity={0.28} /><stop offset="95%" stopColor="currentColor" stopOpacity={0} /></linearGradient></defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="day" axisLine={false} tickLine={false} />
-                        <YAxis hide domain={[0, 'auto']} />
-                        <Tooltip formatter={(value) => [`${numberFormat.format(Number(value))} kcal`, '热量']} />
-                        <Area type="monotone" dataKey="value" stroke="currentColor" fill="url(#fill)" strokeWidth={3} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </section>
-                <section className="panel quick-panel">
-                  <div className="panel-title compact"><div><p className="eyebrow">效率工具</p><h2>快捷操作</h2></div></div>
-                  <button onClick={() => openFoodModal()}><CalendarDays size={18} /><span><strong>手动添加饮食</strong><small>记录到当前选择日期</small></span><ChevronRight size={17} /></button>
-                  <button onClick={() => void addPostWorkoutSnack()}><Dumbbell size={18} /><span><strong>训练后加餐</strong><small>蛋白粉 + 香蕉</small></span><ChevronRight size={17} /></button>
-                  <button onClick={() => openFoodModal('加餐')}><Apple size={18} /><span><strong>添加自定义加餐</strong><small>快速补充当日营养</small></span><ChevronRight size={17} /></button>
-                </section>
+                <section className="panel"><div className="panel-title compact"><div><p className="eyebrow">最近 7 天</p><h2>真实热量趋势</h2></div><ChevronRight size={18} /></div><div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="currentColor" stopOpacity={0.28} /><stop offset="95%" stopColor="currentColor" stopOpacity={0} /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="day" axisLine={false} tickLine={false} /><YAxis hide domain={[0, 'auto']} /><Tooltip formatter={(value) => [`${numberFormat.format(Number(value))} kcal`, '热量']} /><Area type="monotone" dataKey="value" stroke="currentColor" fill="url(#fill)" strokeWidth={3} /></AreaChart></ResponsiveContainer></div></section>
+                <section className="panel quick-panel"><div className="panel-title compact"><div><p className="eyebrow">效率工具</p><h2>快捷操作</h2></div></div><button onClick={() => openFoodModal()}><CalendarDays size={18} /><span><strong>手动添加饮食</strong><small>记录到当前选择日期</small></span><ChevronRight size={17} /></button><button onClick={() => void addPostWorkoutSnack()}><Dumbbell size={18} /><span><strong>训练后加餐</strong><small>蛋白粉 + 香蕉</small></span><ChevronRight size={17} /></button><button onClick={() => openFoodModal('加餐')}><Apple size={18} /><span><strong>添加自定义加餐</strong><small>快速补充当日营养</small></span><ChevronRight size={17} /></button></section>
               </aside>
             </div>
           </>
-        ) : (
-          <GoalSettings />
-        )}
+        ) : null}
       </main>
 
       {modalOpen && showDashboard && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setModalOpen(false); }}>
           <section className="food-modal" role="dialog" aria-modal="true" aria-labelledby="food-modal-title">
-            <div className="modal-header">
-              <div><p className="eyebrow">新增记录 · {recordLabel}</p><h2 id="food-modal-title">记录饮食</h2></div>
-              <button className="icon-button" aria-label="关闭" disabled={saving} onClick={() => setModalOpen(false)}><X size={19} /></button>
-            </div>
+            <div className="modal-header"><div><p className="eyebrow">新增记录 · {recordLabel}</p><h2 id="food-modal-title">记录饮食</h2></div><button className="icon-button" aria-label="关闭" disabled={saving} onClick={() => setModalOpen(false)}><X size={19} /></button></div>
             <form onSubmit={submitFood}>
               <label>食物名称<input name="name" autoFocus placeholder="例如：鸡胸肉" /></label>
-              <div className="form-grid">
-                <label>餐次<select name="meal" value={selectedMeal} onChange={(event) => setSelectedMeal(event.target.value as MealType)}>{meals.map((meal) => <option key={meal}>{meal}</option>)}</select></label>
-                <label>数量<input name="amount" type="number" min="0.1" step="0.1" defaultValue="100" /></label>
-                <label>单位<input name="unit" defaultValue="g" /></label>
-                <label>热量 kcal<input name="calories" type="number" min="0" step="0.1" defaultValue="0" /></label>
-                <label>蛋白质 g<input name="protein" type="number" min="0" step="0.1" defaultValue="0" /></label>
-                <label>碳水 g<input name="carbs" type="number" min="0" step="0.1" defaultValue="0" /></label>
-                <label>脂肪 g<input name="fat" type="number" min="0" step="0.1" defaultValue="0" /></label>
-              </div>
+              <div className="form-grid"><label>餐次<select name="meal" value={selectedMeal} onChange={(event) => setSelectedMeal(event.target.value as MealType)}>{meals.map((meal) => <option key={meal}>{meal}</option>)}</select></label><label>数量<input name="amount" type="number" min="0.1" step="0.1" defaultValue="100" /></label><label>单位<input name="unit" defaultValue="g" /></label><label>热量 kcal<input name="calories" type="number" min="0" step="0.1" defaultValue="0" /></label><label>蛋白质 g<input name="protein" type="number" min="0" step="0.1" defaultValue="0" /></label><label>碳水 g<input name="carbs" type="number" min="0" step="0.1" defaultValue="0" /></label><label>脂肪 g<input name="fat" type="number" min="0" step="0.1" defaultValue="0" /></label></div>
               {formError && <p className="form-error" role="alert">{formError}</p>}
               <div className="modal-actions"><button type="button" className="ghost" disabled={saving} onClick={() => setModalOpen(false)}>取消</button><button type="submit" className="primary" disabled={saving}>{saving ? '保存中…' : '保存记录'}</button></div>
             </form>
