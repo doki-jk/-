@@ -58,7 +58,7 @@ export function DataAnalysis() {
     const divisor = recordedDays.length || 1;
     const totalCalories = recordedDays.reduce((sum, item) => sum + item.calories, 0);
     const totalProtein = recordedDays.reduce((sum, item) => sum + item.protein, 0);
-    const latestWeight = bodyRecords.at(-1)?.weight ?? null;
+    const latestWeight = bodyRecords.length > 0 ? bodyRecords[bodyRecords.length - 1].weight : null;
     const firstWeight = bodyRecords[0]?.weight ?? null;
     const weightChange = latestWeight != null && firstWeight != null ? latestWeight - firstWeight : null;
     return {
