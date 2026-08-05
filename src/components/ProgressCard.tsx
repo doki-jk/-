@@ -1,0 +1,2 @@
+interface Props { label:string; value:number; target:number; unit:string; }
+export function ProgressCard({label,value,target,unit}:Props){const percent=Math.min(100,Math.round((value/target)*100));return <article className="progress-card"><div className="progress-head"><span>{label}</span><strong>{Math.round(value)}<small> / {target}{unit}</small></strong></div><div className="track"><span style={{width:`${percent}%`}}/></div><p>{percent}% 已完成</p></article>}
