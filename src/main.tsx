@@ -11,7 +11,10 @@ async function bootstrap(): Promise<void> {
     try {
       await initializeDatabase();
       await seedDatabase();
-      await useNutritionStore.getState().loadToday();
+      await Promise.all([
+        useNutritionStore.getState().loadToday(),
+        useNutritionStore.getState().loadGoal(),
+      ]);
     } catch (error) {
       console.error('FuelLog 数据库初始化失败', error);
     }
