@@ -19,6 +19,7 @@ import {
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BodyData } from './components/BodyData';
 import { DataAnalysis } from './components/DataAnalysis';
+import { FoodLibrary } from './components/FoodLibrary';
 import { GoalSettings } from './components/GoalSettings';
 import { ProgressCard } from './components/ProgressCard';
 import { weeklyCalories } from './data/mock';
@@ -75,7 +76,7 @@ export default function App() {
 
   const isToday = selectedDate === localDateKey();
   const recordLabel = isToday ? '今天' : dateLabel(selectedDate).replace(/星期.*/, '').trim();
-  const showDashboard = !['目标设置', '身体数据', '数据分析'].includes(active);
+  const showDashboard = !['目标设置', '身体数据', '数据分析', '食物库'].includes(active);
 
   async function refreshAnalytics() {
     if (!isTauriRuntime()) return;
@@ -166,7 +167,7 @@ export default function App() {
       </aside>
 
       <main>
-        {active === '目标设置' ? <GoalSettings /> : active === '身体数据' ? <BodyData /> : active === '数据分析' ? <DataAnalysis /> : showDashboard ? (
+        {active === '目标设置' ? <GoalSettings /> : active === '身体数据' ? <BodyData /> : active === '数据分析' ? <DataAnalysis /> : active === '食物库' ? <FoodLibrary /> : showDashboard ? (
           <>
             <header>
               <div><p className="eyebrow">{dateLabel(selectedDate)}</p><h1>{isToday ? '今天继续稳步完成营养目标。' : `查看 ${recordLabel} 的饮食记录。`}</h1></div>
