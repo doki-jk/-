@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { initialFoods } from '../data/mock';
 import { isTauriRuntime } from '../database/client';
+import { goalRepository, type DayType } from '../repositories/goalRepository';
 import { mealRepository } from '../repositories/mealRepository';
 import type { DailyGoal, FoodEntry } from '../types';
 
@@ -14,9 +15,11 @@ interface State {
   error: string | null;
   loadToday: () => Promise<void>;
   loadDate: (date: string) => Promise<void>;
+  loadGoal: () => Promise<void>;
+  saveGoal: (dayType: DayType, goal: DailyGoal) => Promise<void>;
   addFood: (food: FoodEntry) => Promise<void>;
   removeFood: (id: string) => Promise<void>;
-  toggleTrainingDay: () => void;
+  toggleTrainingDay: () => Promise<void>;
 }
 
 function localDateKey(date = new Date()): string {
@@ -57,7 +60,7 @@ export const useNutritionStore = create<State>()(
   persist(
     (set, get) => ({
       foods: initialFoods,
-      goal: { calories: 2300, protein: 170, carbs: 260, fat: 70 },
+      goal: goalRepository.defaults.training,
       trainingDay: true,
       selectedDate: localDateKey(),
       loading: false,
@@ -105,6 +108,24 @@ export const useNutritionStore = create<State>()(
         }
       },
 
+      loadGoal: async () => {
+        const dayType: DayType = get().trainingDay ? 'training' : 'rest';
+        if (!isTauriRuntime()) {
+          set({ goal: goalRepository.defaults[dayType], error: null });
+          return;
+        }
+        try {
+          set({ goal: await goalRepository.get(dayType), error: null });
+        } catch (error) {
+          set({ error: error instanceof Error ? error.message : '读取营养目标失败' });
+        }
+      },
+
+      saveGoal: async (dayType, goal) => {
+        if (isTauriRuntime()) await goalRepository.save(dayType, goal);
+        if ((dayType === 'training') === get().trainingDay) set({ goal, error: null });
+      },
+
       addFood: async (food) => {
         if (!isTauriRuntime()) {
           set((state) => ({ foods: [...state.foods, food], error: null }));
@@ -147,7 +168,19 @@ export const useNutritionStore = create<State>()(
         }
       },
 
-      toggleTrainingDay: () => set({ trainingDay: !get().trainingDay }),
+      toggleTrainingDay: async () => {
+        const trainingDay = !get().trainingDay;
+        const dayType: DayType = trainingDay ? 'training' : 'rest';
+        set({ trainingDay, error: null });
+        try {
+          const goal = isTauriRuntime()
+            ? await goalRepository.get(dayType)
+            : goalRepository.defaults[dayType];
+          set({ goal });
+        } catch (error) {
+          set({ error: error instanceof Error ? error.message : '切换营养目标失败' });
+        }
+      },
     }),
     {
       name: 'fuellog-nutrition',
