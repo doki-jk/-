@@ -9,20 +9,34 @@ interface State {
   foods: FoodEntry[];
   goal: DailyGoal;
   trainingDay: boolean;
+  selectedDate: string;
   loading: boolean;
   error: string | null;
   loadToday: () => Promise<void>;
+  loadDate: (date: string) => Promise<void>;
   addFood: (food: FoodEntry) => Promise<void>;
   removeFood: (id: string) => Promise<void>;
   toggleTrainingDay: () => void;
 }
 
-function todayKey(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
+function localDateKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function assertDateKey(value: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00`))) {
+    throw new Error('日期格式必须为 YYYY-MM-DD');
+  }
+}
+
+function selectedDateTime(date: string): string {
+  assertDateKey(date);
+  const now = new Date();
+  const value = new Date(`${date}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`);
+  return value.toISOString();
 }
 
 function toFoodEntry(entry: Awaited<ReturnType<typeof mealRepository.add>>): FoodEntry {
@@ -45,14 +59,30 @@ export const useNutritionStore = create<State>()(
       foods: initialFoods,
       goal: { calories: 2300, protein: 170, carbs: 260, fat: 70 },
       trainingDay: true,
+      selectedDate: localDateKey(),
       loading: false,
       error: null,
 
       loadToday: async () => {
-        if (!isTauriRuntime()) return;
-        set({ loading: true, error: null });
+        await get().loadDate(localDateKey());
+      },
+
+      loadDate: async (date) => {
         try {
-          const entries = await mealRepository.getByDate(todayKey());
+          assertDateKey(date);
+        } catch (error) {
+          set({ error: error instanceof Error ? error.message : '日期无效' });
+          return;
+        }
+
+        if (!isTauriRuntime()) {
+          set({ selectedDate: date, error: null });
+          return;
+        }
+
+        set({ selectedDate: date, loading: true, error: null });
+        try {
+          const entries = await mealRepository.getByDate(date);
           set({
             foods: entries.map((entry) => ({
               id: entry.id,
@@ -86,7 +116,7 @@ export const useNutritionStore = create<State>()(
           const saved = await mealRepository.add({
             foodName: food.name,
             mealType: food.meal,
-            consumedAt: new Date().toISOString(),
+            consumedAt: selectedDateTime(get().selectedDate),
             amount: food.amount,
             unit: food.unit,
             calories: food.calories,
