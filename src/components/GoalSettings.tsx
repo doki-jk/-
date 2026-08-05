@@ -4,6 +4,7 @@ import { isTauriRuntime } from '../database/client';
 import { goalRepository, type DayType } from '../repositories/goalRepository';
 import { useNutritionStore } from '../store/useNutritionStore';
 import type { DailyGoal } from '../types';
+import './GoalSettings.css';
 
 const labels: Record<keyof DailyGoal, string> = {
   calories: '热量 kcal',
