@@ -20,6 +20,26 @@ interface State {
   toggleTrainingDay: () => Promise<void>;
 }
 
+function describeError(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+
+  if (error && typeof error === 'object') {
+    const candidate = error as { message?: unknown; error?: unknown };
+    if (typeof candidate.message === 'string' && candidate.message.trim()) return candidate.message;
+    if (typeof candidate.error === 'string' && candidate.error.trim()) return candidate.error;
+
+    try {
+      const serialized = JSON.stringify(error);
+      if (serialized && serialized !== '{}') return `${fallback}：${serialized}`;
+    } catch {
+      // Ignore non-serializable plugin errors and use the fallback below.
+    }
+  }
+
+  return fallback;
+}
+
 function localDateKey(date = new Date()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -72,7 +92,7 @@ export const useNutritionStore = create<State>()(
         try {
           assertDateKey(date);
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : '日期无效' });
+          set({ error: describeError(error, '日期无效') });
           return;
         }
 
@@ -81,10 +101,7 @@ export const useNutritionStore = create<State>()(
           const entries = await mealRepository.getByDate(date);
           set({ foods: entries.map(toFoodEntry), loading: false });
         } catch (error) {
-          set({
-            loading: false,
-            error: error instanceof Error ? error.message : '读取饮食记录失败',
-          });
+          set({ loading: false, error: describeError(error, '读取饮食记录失败') });
         }
       },
 
@@ -93,7 +110,7 @@ export const useNutritionStore = create<State>()(
         try {
           set({ goal: await goalRepository.get(dayType), error: null });
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : '读取营养目标失败' });
+          set({ error: describeError(error, '读取营养目标失败') });
         }
       },
 
@@ -102,7 +119,7 @@ export const useNutritionStore = create<State>()(
           await goalRepository.save(dayType, goal);
           if ((dayType === 'training') === get().trainingDay) set({ goal, error: null });
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : '保存营养目标失败' });
+          set({ error: describeError(error, '保存营养目标失败') });
           throw error;
         }
       },
@@ -123,7 +140,7 @@ export const useNutritionStore = create<State>()(
           });
           set((state) => ({ foods: [...state.foods, toFoodEntry(saved)] }));
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : '保存饮食记录失败' });
+          set({ error: describeError(error, '保存饮食记录失败') });
           throw error;
         }
       },
@@ -134,7 +151,7 @@ export const useNutritionStore = create<State>()(
           await mealRepository.remove(id);
           set((state) => ({ foods: state.foods.filter((food) => food.id !== id) }));
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : '删除饮食记录失败' });
+          set({ error: describeError(error, '删除饮食记录失败') });
           throw error;
         }
       },
@@ -146,7 +163,7 @@ export const useNutritionStore = create<State>()(
           const goal = await goalRepository.get(dayType);
           set({ trainingDay, goal, error: null });
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : '切换营养目标失败' });
+          set({ error: describeError(error, '切换营养目标失败') });
         }
       },
     }),

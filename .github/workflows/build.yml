@@ -31,6 +31,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate desktop SQL write permission
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          capability = json.loads(Path('src-tauri/capabilities/default.json').read_text(encoding='utf-8'))
+          permissions = capability.get('permissions', [])
+          if 'sql:allow-execute' not in permissions:
+              raise SystemExit('Missing sql:allow-execute: desktop data writes would fail')
+          print('Desktop SQL write permission is enabled')
+          PY
+
       - name: Install Linux desktop dependencies
         run: |
           sudo apt-get update

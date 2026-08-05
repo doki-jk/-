@@ -1,6 +1,6 @@
 [package]
 name = "fitness-nutrition-tracker"
-version = "0.1.0"
+version = "0.1.1"
 description = "A desktop nutrition tracker for fitness users"
 authors = ["FuelLog Team"]
 edition = "2021"
