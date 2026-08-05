@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   Apple,
@@ -17,10 +17,12 @@ import {
   X,
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { ProgressCard } from './components/ProgressCard';
 import { weeklyCalories } from './data/mock';
+import { isTauriRuntime } from './database/client';
+import { analyticsRepository } from './repositories/analyticsRepository';
 import { useNutritionStore } from './store/useNutritionStore';
 import type { FoodEntry, MealType } from './types';
-import { ProgressCard } from './components/ProgressCard';
 import './styles.css';
 
 const nav = [
@@ -33,7 +35,6 @@ const nav = [
 ] as const;
 
 const meals: MealType[] = ['早餐', '午餐', '晚餐', '加餐'];
-
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 });
 
 function todayLabel() {
@@ -50,11 +51,33 @@ function createId() {
 }
 
 export default function App() {
-  const { foods, goal, trainingDay, toggleTrainingDay, removeFood, addFood } = useNutritionStore();
+  const { foods, goal, trainingDay, toggleTrainingDay, removeFood, addFood, error } = useNutritionStore();
   const [active, setActive] = useState('今日概览');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedMeal, setSelectedMeal] = useState<MealType>('早餐');
   const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [chartData, setChartData] = useState(weeklyCalories);
+
+  async function refreshAnalytics() {
+    if (!isTauriRuntime()) return;
+    try {
+      const points = await analyticsRepository.getLastSevenDays();
+      const formatter = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' });
+      setChartData(
+        points.map((point) => ({
+          day: formatter.format(new Date(`${point.date}T12:00:00`)),
+          value: point.calories,
+        })),
+      );
+    } catch (analyticsError) {
+      console.error('读取营养趋势失败', analyticsError);
+    }
+  }
+
+  useEffect(() => {
+    void refreshAnalytics();
+  }, []);
 
   const totals = useMemo(
     () =>
@@ -78,9 +101,10 @@ export default function App() {
     setModalOpen(true);
   }
 
-  function submitFood(event: React.FormEvent<HTMLFormElement>) {
+  async function submitFood(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const numeric = (name: string) => Number(form.get(name));
     const entry: FoodEntry = {
       id: createId(),
@@ -104,23 +128,46 @@ export default function App() {
       return;
     }
 
-    addFood(entry);
-    setModalOpen(false);
-    event.currentTarget.reset();
+    setSaving(true);
+    setFormError('');
+    try {
+      await addFood(entry);
+      await refreshAnalytics();
+      setModalOpen(false);
+      formElement.reset();
+    } catch (saveError) {
+      setFormError(saveError instanceof Error ? saveError.message : '保存失败，请重试。');
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function addPostWorkoutSnack() {
-    addFood({
-      id: createId(),
-      name: '蛋白粉 + 香蕉',
-      meal: '加餐',
-      amount: 1,
-      unit: '份',
-      calories: 225,
-      protein: 26,
-      carbs: 29,
-      fat: 2,
-    });
+  async function deleteFood(id: string) {
+    try {
+      await removeFood(id);
+      await refreshAnalytics();
+    } catch {
+      // Store 会在页面顶部显示具体错误。
+    }
+  }
+
+  async function addPostWorkoutSnack() {
+    try {
+      await addFood({
+        id: createId(),
+        name: '蛋白粉 + 香蕉',
+        meal: '加餐',
+        amount: 1,
+        unit: '份',
+        calories: 225,
+        protein: 26,
+        carbs: 29,
+        fat: 2,
+      });
+      await refreshAnalytics();
+    } catch {
+      // Store 会在页面顶部显示具体错误。
+    }
   }
 
   return (
@@ -152,6 +199,8 @@ export default function App() {
             <button className="primary" onClick={() => openFoodModal()}><Plus size={18} />记录饮食</button>
           </div>
         </header>
+
+        {error && <p className="form-error" role="alert">数据操作失败：{error}</p>}
 
         <section className="hero">
           <div>
@@ -189,7 +238,7 @@ export default function App() {
                   ) : mealFoods.map((food) => (
                     <div className="food-row" key={food.id}>
                       <div><strong>{food.name}</strong><span>{numberFormat.format(food.amount)}{food.unit} · 蛋白质 {numberFormat.format(food.protein)}g</span></div>
-                      <div><strong>{numberFormat.format(food.calories)} kcal</strong><button aria-label={`删除${food.name}`} onClick={() => removeFood(food.id)}><Trash2 size={15} /></button></div>
+                      <div><strong>{numberFormat.format(food.calories)} kcal</strong><button aria-label={`删除${food.name}`} onClick={() => void deleteFood(food.id)}><Trash2 size={15} /></button></div>
                     </div>
                   ))}
                 </div>
@@ -199,15 +248,15 @@ export default function App() {
 
           <aside className="right-column">
             <section className="panel">
-              <div className="panel-title compact"><div><p className="eyebrow">最近 7 天</p><h2>热量趋势</h2></div><ChevronRight size={18} /></div>
+              <div className="panel-title compact"><div><p className="eyebrow">最近 7 天</p><h2>真实热量趋势</h2></div><ChevronRight size={18} /></div>
               <div className="chart">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={weeklyCalories}>
+                  <AreaChart data={chartData}>
                     <defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="currentColor" stopOpacity={0.28} /><stop offset="95%" stopColor="currentColor" stopOpacity={0} /></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="day" axisLine={false} tickLine={false} />
-                    <YAxis hide domain={[0, 2600]} />
-                    <Tooltip />
+                    <YAxis hide domain={[0, 'auto']} />
+                    <Tooltip formatter={(value) => [`${numberFormat.format(Number(value))} kcal`, '热量']} />
                     <Area type="monotone" dataKey="value" stroke="currentColor" fill="url(#fill)" strokeWidth={3} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -216,7 +265,7 @@ export default function App() {
             <section className="panel quick-panel">
               <div className="panel-title compact"><div><p className="eyebrow">效率工具</p><h2>快捷操作</h2></div></div>
               <button onClick={() => openFoodModal()}><CalendarDays size={18} /><span><strong>手动添加饮食</strong><small>录入任意食物营养数据</small></span><ChevronRight size={17} /></button>
-              <button onClick={addPostWorkoutSnack}><Dumbbell size={18} /><span><strong>训练后加餐</strong><small>蛋白粉 + 香蕉</small></span><ChevronRight size={17} /></button>
+              <button onClick={() => void addPostWorkoutSnack()}><Dumbbell size={18} /><span><strong>训练后加餐</strong><small>蛋白粉 + 香蕉</small></span><ChevronRight size={17} /></button>
               <button onClick={() => openFoodModal('加餐')}><Apple size={18} /><span><strong>添加自定义加餐</strong><small>快速补充当日营养</small></span><ChevronRight size={17} /></button>
             </section>
           </aside>
@@ -224,11 +273,11 @@ export default function App() {
       </main>
 
       {modalOpen && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModalOpen(false); }}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setModalOpen(false); }}>
           <section className="food-modal" role="dialog" aria-modal="true" aria-labelledby="food-modal-title">
             <div className="modal-header">
               <div><p className="eyebrow">新增记录</p><h2 id="food-modal-title">记录饮食</h2></div>
-              <button className="icon-button" aria-label="关闭" onClick={() => setModalOpen(false)}><X size={19} /></button>
+              <button className="icon-button" aria-label="关闭" disabled={saving} onClick={() => setModalOpen(false)}><X size={19} /></button>
             </div>
             <form onSubmit={submitFood}>
               <label>食物名称<input name="name" autoFocus placeholder="例如：鸡胸肉" /></label>
@@ -242,7 +291,7 @@ export default function App() {
                 <label>脂肪 g<input name="fat" type="number" min="0" step="0.1" defaultValue="0" /></label>
               </div>
               {formError && <p className="form-error" role="alert">{formError}</p>}
-              <div className="modal-actions"><button type="button" className="ghost" onClick={() => setModalOpen(false)}>取消</button><button type="submit" className="primary">保存记录</button></div>
+              <div className="modal-actions"><button type="button" className="ghost" disabled={saving} onClick={() => setModalOpen(false)}>取消</button><button type="submit" className="primary" disabled={saving}>{saving ? '保存中…' : '保存记录'}</button></div>
             </form>
           </section>
         </div>
