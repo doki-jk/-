@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   windows-build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,8 +31,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Generate application icons
+        run: npx tauri icon src-tauri/icons/icon.svg
+
       - name: Build Windows installers
-        run: npm run tauri build -- --bundles nsis,msi
+        run: npx tauri build --bundles nsis,msi
 
       - name: Upload Windows installers
         uses: actions/upload-artifact@v4
