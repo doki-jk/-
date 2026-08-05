@@ -37,13 +37,20 @@ const nav = [
 const meals: MealType[] = ['早餐', '午餐', '晚餐', '加餐'];
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 });
 
-function todayLabel() {
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function dateLabel(date: string) {
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
     weekday: 'long',
-  }).format(new Date());
+  }).format(new Date(`${date}T12:00:00`));
 }
 
 function createId() {
@@ -51,13 +58,27 @@ function createId() {
 }
 
 export default function App() {
-  const { foods, goal, trainingDay, toggleTrainingDay, removeFood, addFood, error } = useNutritionStore();
+  const {
+    foods,
+    goal,
+    trainingDay,
+    selectedDate,
+    loading,
+    toggleTrainingDay,
+    loadDate,
+    removeFood,
+    addFood,
+    error,
+  } = useNutritionStore();
   const [active, setActive] = useState('今日概览');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedMeal, setSelectedMeal] = useState<MealType>('早餐');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
   const [chartData, setChartData] = useState(weeklyCalories);
+
+  const isToday = selectedDate === localDateKey();
+  const recordLabel = isToday ? '今天' : dateLabel(selectedDate).replace(/星期.*/, '').trim();
 
   async function refreshAnalytics() {
     if (!isTauriRuntime()) return;
@@ -193,18 +214,29 @@ export default function App() {
 
       <main>
         <header>
-          <div><p className="eyebrow">{todayLabel()}</p><h1>今天继续稳步完成营养目标。</h1></div>
+          <div><p className="eyebrow">{dateLabel(selectedDate)}</p><h1>{isToday ? '今天继续稳步完成营养目标。' : `查看 ${recordLabel} 的饮食记录。`}</h1></div>
           <div className="header-actions">
+            <label className="date-picker" aria-label="选择记录日期">
+              <CalendarDays size={17} />
+              <input
+                type="date"
+                value={selectedDate}
+                disabled={loading || saving}
+                onChange={(event) => void loadDate(event.target.value)}
+              />
+            </label>
+            {!isToday && <button className="ghost" disabled={loading || saving} onClick={() => void loadDate(localDateKey())}>返回今天</button>}
             <button className="day-toggle" onClick={toggleTrainingDay}><Dumbbell size={17} />{trainingDay ? '训练日' : '休息日'}</button>
-            <button className="primary" onClick={() => openFoodModal()}><Plus size={18} />记录饮食</button>
+            <button className="primary" disabled={loading} onClick={() => openFoodModal()}><Plus size={18} />记录饮食</button>
           </div>
         </header>
 
         {error && <p className="form-error" role="alert">数据操作失败：{error}</p>}
+        {loading && <p className="data-status" role="status">正在读取 {recordLabel} 的饮食记录…</p>}
 
         <section className="hero">
           <div>
-            <span>今日热量</span>
+            <span>{recordLabel}热量</span>
             <strong>{numberFormat.format(totals.calories)} <small>/ {goal.calories} kcal</small></strong>
             <p>{totals.calories <= goal.calories ? `还可摄入 ${numberFormat.format(goal.calories - totals.calories)} kcal` : `已超出 ${numberFormat.format(totals.calories - goal.calories)} kcal`}</p>
           </div>
@@ -222,8 +254,8 @@ export default function App() {
         <div className="content-grid">
           <section className="panel meals-panel">
             <div className="panel-title">
-              <div><p className="eyebrow">今天的记录</p><h2>饮食明细</h2></div>
-              <button className="ghost" onClick={() => openFoodModal()}><Search size={17} />添加食物</button>
+              <div><p className="eyebrow">{recordLabel}的记录</p><h2>饮食明细</h2></div>
+              <button className="ghost" disabled={loading} onClick={() => openFoodModal()}><Search size={17} />添加食物</button>
             </div>
             {meals.map((meal) => {
               const mealFoods = foods.filter((food) => food.meal === meal);
@@ -234,7 +266,7 @@ export default function App() {
                     <span>{numberFormat.format(mealFoods.reduce((sum, food) => sum + food.calories, 0))} kcal</span>
                   </div>
                   {mealFoods.length === 0 ? (
-                    <button className="empty-add" onClick={() => openFoodModal(meal)}><Plus size={16} />添加{meal}</button>
+                    <button className="empty-add" disabled={loading} onClick={() => openFoodModal(meal)}><Plus size={16} />添加{meal}</button>
                   ) : mealFoods.map((food) => (
                     <div className="food-row" key={food.id}>
                       <div><strong>{food.name}</strong><span>{numberFormat.format(food.amount)}{food.unit} · 蛋白质 {numberFormat.format(food.protein)}g</span></div>
@@ -264,7 +296,7 @@ export default function App() {
             </section>
             <section className="panel quick-panel">
               <div className="panel-title compact"><div><p className="eyebrow">效率工具</p><h2>快捷操作</h2></div></div>
-              <button onClick={() => openFoodModal()}><CalendarDays size={18} /><span><strong>手动添加饮食</strong><small>录入任意食物营养数据</small></span><ChevronRight size={17} /></button>
+              <button onClick={() => openFoodModal()}><CalendarDays size={18} /><span><strong>手动添加饮食</strong><small>记录到当前选择日期</small></span><ChevronRight size={17} /></button>
               <button onClick={() => void addPostWorkoutSnack()}><Dumbbell size={18} /><span><strong>训练后加餐</strong><small>蛋白粉 + 香蕉</small></span><ChevronRight size={17} /></button>
               <button onClick={() => openFoodModal('加餐')}><Apple size={18} /><span><strong>添加自定义加餐</strong><small>快速补充当日营养</small></span><ChevronRight size={17} /></button>
             </section>
@@ -276,7 +308,7 @@ export default function App() {
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setModalOpen(false); }}>
           <section className="food-modal" role="dialog" aria-modal="true" aria-labelledby="food-modal-title">
             <div className="modal-header">
-              <div><p className="eyebrow">新增记录</p><h2 id="food-modal-title">记录饮食</h2></div>
+              <div><p className="eyebrow">新增记录 · {recordLabel}</p><h2 id="food-modal-title">记录饮食</h2></div>
               <button className="icon-button" aria-label="关闭" disabled={saving} onClick={() => setModalOpen(false)}><X size={19} /></button>
             </div>
             <form onSubmit={submitFood}>
