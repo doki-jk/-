@@ -1,1 +1,23 @@
-import React from 'react';import ReactDOM from 'react-dom/client';import App from './App';ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import { isTauriRuntime } from './database/client';
+import { initializeDatabase } from './database/migrations';
+
+async function bootstrap(): Promise<void> {
+  if (isTauriRuntime()) {
+    try {
+      await initializeDatabase();
+    } catch (error) {
+      console.error('FuelLog 数据库初始化失败', error);
+    }
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}
+
+void bootstrap();
