@@ -23,8 +23,6 @@ import { FoodLibrary } from './components/FoodLibrary';
 import { GoalSettings } from './components/GoalSettings';
 import { MealRecords } from './components/MealRecords';
 import { ProgressCard } from './components/ProgressCard';
-import { weeklyCalories } from './data/mock';
-import { isTauriRuntime } from './database/client';
 import { analyticsRepository } from './repositories/analyticsRepository';
 import { useNutritionStore } from './store/useNutritionStore';
 import type { FoodEntry, MealType } from './types';
@@ -73,7 +71,7 @@ export default function App() {
   const [selectedMeal, setSelectedMeal] = useState<MealType>('早餐');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [chartData, setChartData] = useState(weeklyCalories);
+  const [chartData, setChartData] = useState<Array<{ day: string; value: number }>>([]);
 
   const isToday = selectedDate === localDateKey();
   const recordLabel = isToday ? '今天' : dateLabel(selectedDate).replace(/星期.*/, '').trim();
@@ -81,11 +79,13 @@ export default function App() {
   const canShowFoodModal = showDashboard || active === '饮食记录';
 
   async function refreshAnalytics() {
-    if (!isTauriRuntime()) return;
     try {
       const points = await analyticsRepository.getLastSevenDays();
       const formatter = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' });
-      setChartData(points.map((point) => ({ day: formatter.format(new Date(`${point.date}T12:00:00`)), value: point.calories })));
+      setChartData(points.map((point) => ({
+        day: formatter.format(new Date(`${point.date}T12:00:00`)),
+        value: point.calories,
+      })));
     } catch (analyticsError) {
       console.error('读取营养趋势失败', analyticsError);
     }
