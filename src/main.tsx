@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { GoalSettings } from './components/GoalSettings';
 import { isTauriRuntime } from './database/client';
 import { initializeDatabase } from './database/migrations';
 import { seedDatabase } from './database/seed';
@@ -23,6 +24,7 @@ async function bootstrap(): Promise<void> {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <App />
+      <GoalSettings />
     </React.StrictMode>
   );
 }
