@@ -41,5 +41,16 @@ jobs:
           rustup default stable
           rustup update stable
 
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
       - name: Check Tauri backend
         run: cargo check --manifest-path src-tauri/Cargo.toml
