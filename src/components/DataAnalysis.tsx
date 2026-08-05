@@ -14,6 +14,7 @@ import {
 import { isTauriRuntime } from '../database/client';
 import { analyticsRepository, type DailyNutritionPoint } from '../repositories/analyticsRepository';
 import { bodyRecordRepository, type BodyRecord } from '../repositories/bodyRecordRepository';
+import '../analysis.css';
 
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 });
 
