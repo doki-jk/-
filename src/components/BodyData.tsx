@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, Plus, Trash2 } from 'lucide-react';
 import { isTauriRuntime } from '../database/client';
 import { bodyRecordRepository, type BodyRecord } from '../repositories/bodyRecordRepository';
+import './bodyData.css';
 
 function localDateKey(): string {
   const now = new Date();
@@ -33,15 +34,10 @@ export function BodyData() {
     }
   }
 
-  useEffect(() => {
-    void load();
-  }, []);
+  useEffect(() => { void load(); }, []);
 
   const latest = records[0];
-  const weightChange = useMemo(() => {
-    if (records.length < 2) return null;
-    return records[0].weight - records[1].weight;
-  }, [records]);
+  const weightChange = useMemo(() => records.length < 2 ? null : records[0].weight - records[1].weight, [records]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,19 +81,13 @@ export function BodyData() {
 
   return (
     <section className="body-data-page">
-      <div className="settings-heading">
-        <p className="eyebrow">身体变化</p>
-        <h1>身体数据记录</h1>
-        <p>记录体重、体脂、肌肉量和腰围。相同日期再次保存时会覆盖当天记录。</p>
-      </div>
-
+      <div className="settings-heading"><p className="eyebrow">身体变化</p><h1>身体数据记录</h1><p>记录体重、体脂、肌肉量和腰围。相同日期再次保存时会覆盖当天记录。</p></div>
       <div className="body-summary-grid">
         <article className="body-summary-card"><span>最新体重</span><strong>{latest ? `${latest.weight} kg` : '--'}</strong></article>
         <article className="body-summary-card"><span>较上次变化</span><strong>{weightChange == null ? '--' : `${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)} kg`}</strong></article>
         <article className="body-summary-card"><span>最新体脂</span><strong>{latest?.bodyFat == null ? '--' : `${latest.bodyFat}%`}</strong></article>
         <article className="body-summary-card"><span>最新腰围</span><strong>{latest?.waist == null ? '--' : `${latest.waist} cm`}</strong></article>
       </div>
-
       <div className="body-data-grid">
         <form className="panel body-form" onSubmit={submit}>
           <div className="panel-title"><div><p className="eyebrow">新增或更新</p><h2>记录一次测量</h2></div><Activity size={20} /></div>
@@ -111,23 +101,16 @@ export function BodyData() {
           <label className="body-note">备注<textarea name="note" rows={4} placeholder="例如：晨起空腹测量" /></label>
           <div className="goal-actions"><span role="status">{message}</span><button className="primary" disabled={saving}><Plus size={16} />{saving ? '保存中…' : '保存记录'}</button></div>
         </form>
-
         <section className="panel body-history">
           <div className="panel-title"><div><p className="eyebrow">历史数据</p><h2>测量记录</h2></div></div>
           {loading ? <p className="data-status">正在读取身体数据…</p> : records.length === 0 ? <p className="empty-state">还没有身体数据记录。</p> : (
-            <div className="body-record-list">
-              {records.map((record) => (
-                <article className="body-record" key={record.id}>
-                  <div><strong>{record.recordedDate}</strong><span>{record.note || '无备注'}</span></div>
-                  <div className="body-record-values">
-                    <span><b>{record.weight}</b> kg</span>
-                    {record.bodyFat != null && <span><b>{record.bodyFat}</b>% 体脂</span>}
-                    {record.waist != null && <span><b>{record.waist}</b> cm 腰围</span>}
-                  </div>
-                  <button aria-label={`删除${record.recordedDate}记录`} onClick={() => void remove(record)}><Trash2 size={16} /></button>
-                </article>
-              ))}
-            </div>
+            <div className="body-record-list">{records.map((record) => (
+              <article className="body-record" key={record.id}>
+                <div><strong>{record.recordedDate}</strong><span>{record.note || '无备注'}</span></div>
+                <div className="body-record-values"><span><b>{record.weight}</b> kg</span>{record.bodyFat != null && <span><b>{record.bodyFat}</b>% 体脂</span>}{record.waist != null && <span><b>{record.waist}</b> cm 腰围</span>}</div>
+                <button aria-label={`删除${record.recordedDate}记录`} onClick={() => void remove(record)}><Trash2 size={16} /></button>
+              </article>
+            ))}</div>
           )}
         </section>
       </div>
