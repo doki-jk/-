@@ -21,6 +21,7 @@ import { BodyData } from './components/BodyData';
 import { DataAnalysis } from './components/DataAnalysis';
 import { FoodLibrary } from './components/FoodLibrary';
 import { GoalSettings } from './components/GoalSettings';
+import { MealRecords } from './components/MealRecords';
 import { ProgressCard } from './components/ProgressCard';
 import { weeklyCalories } from './data/mock';
 import { isTauriRuntime } from './database/client';
@@ -76,7 +77,8 @@ export default function App() {
 
   const isToday = selectedDate === localDateKey();
   const recordLabel = isToday ? '今天' : dateLabel(selectedDate).replace(/星期.*/, '').trim();
-  const showDashboard = !['目标设置', '身体数据', '数据分析', '食物库'].includes(active);
+  const showDashboard = !['目标设置', '身体数据', '数据分析', '食物库', '饮食记录'].includes(active);
+  const canShowFoodModal = showDashboard || active === '饮食记录';
 
   async function refreshAnalytics() {
     if (!isTauriRuntime()) return;
@@ -167,7 +169,7 @@ export default function App() {
       </aside>
 
       <main>
-        {active === '目标设置' ? <GoalSettings /> : active === '身体数据' ? <BodyData /> : active === '数据分析' ? <DataAnalysis /> : active === '食物库' ? <FoodLibrary /> : showDashboard ? (
+        {active === '目标设置' ? <GoalSettings /> : active === '身体数据' ? <BodyData /> : active === '数据分析' ? <DataAnalysis /> : active === '食物库' ? <FoodLibrary /> : active === '饮食记录' ? <MealRecords onAddFood={openFoodModal} /> : showDashboard ? (
           <>
             <header>
               <div><p className="eyebrow">{dateLabel(selectedDate)}</p><h1>{isToday ? '今天继续稳步完成营养目标。' : `查看 ${recordLabel} 的饮食记录。`}</h1></div>
@@ -204,7 +206,7 @@ export default function App() {
         ) : null}
       </main>
 
-      {modalOpen && showDashboard && (
+      {modalOpen && canShowFoodModal && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setModalOpen(false); }}>
           <section className="food-modal" role="dialog" aria-modal="true" aria-labelledby="food-modal-title">
             <div className="modal-header"><div><p className="eyebrow">新增记录 · {recordLabel}</p><h2 id="food-modal-title">记录饮食</h2></div><button className="icon-button" aria-label="关闭" disabled={saving} onClick={() => setModalOpen(false)}><X size={19} /></button></div>
