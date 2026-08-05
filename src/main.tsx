@@ -4,12 +4,14 @@ import App from './App';
 import { isTauriRuntime } from './database/client';
 import { initializeDatabase } from './database/migrations';
 import { seedDatabase } from './database/seed';
+import { useNutritionStore } from './store/useNutritionStore';
 
 async function bootstrap(): Promise<void> {
   if (isTauriRuntime()) {
     try {
       await initializeDatabase();
       await seedDatabase();
+      await useNutritionStore.getState().loadToday();
     } catch (error) {
       console.error('FuelLog 数据库初始化失败', error);
     }
