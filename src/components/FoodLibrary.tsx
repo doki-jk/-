@@ -22,7 +22,11 @@ const categories: FoodCategory[] = [
 
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 });
 
-export function FoodLibrary() {
+interface FoodLibraryProps {
+  onRecordFood?: (food: Food) => void;
+}
+
+export function FoodLibrary({ onRecordFood }: FoodLibraryProps) {
   const [foods, setFoods] = useState<Food[]>([]);
   const [keyword, setKeyword] = useState('');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -48,7 +52,9 @@ export function FoodLibrary() {
   }
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void load(); }, 180);
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 180);
     return () => window.clearTimeout(timer);
   }, [keyword, favoritesOnly]);
 
@@ -117,8 +123,8 @@ export function FoodLibrary() {
 
       <div className="food-library-summary">
         <article><span>当前结果</span><strong>{summary.total}</strong></article>
-        <article><span>已收藏</span><strong>{summary.favorites}</strong></article>
-        <article><span>自定义</span><strong>{summary.custom}</strong></article>
+        <article><span>当前结果中的收藏</span><strong>{summary.favorites}</strong></article>
+        <article><span>当前结果中的自定义</span><strong>{summary.custom}</strong></article>
       </div>
 
       {message && <p className="data-status" role="status">{message}</p>}
@@ -126,38 +132,94 @@ export function FoodLibrary() {
       <div className="food-library-grid">
         <section className="panel food-list-panel">
           <div className="food-toolbar">
-            <label><Search size={17} /><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索鸡胸肉、米饭、香蕉…" /></label>
-            <button className={favoritesOnly ? 'active' : ''} onClick={() => setFavoritesOnly((value) => !value)}><Star size={16} />只看收藏</button>
+            <label>
+              <Search size={17} />
+              <input
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                placeholder="搜索鸡胸肉、米饭、香蕉…"
+              />
+            </label>
+            <button
+              type="button"
+              className={favoritesOnly ? 'active' : ''}
+              onClick={() => setFavoritesOnly((value) => !value)}
+            >
+              <Star size={16} />只看收藏
+            </button>
           </div>
 
-          {loading ? <p className="data-status">正在读取食物库…</p> : foods.length === 0 ? <p className="empty-state">没有找到匹配的食物。</p> : (
-            <div className="food-library-list">
-              {foods.map((food) => (
-                <article className="food-library-item" key={food.id}>
-                  <div className="food-library-main">
-                    <div><strong>{food.name}</strong><span>{food.category} · 每 {numberFormat.format(food.baseAmount)}{food.baseUnit}</span></div>
-                    <b>{numberFormat.format(food.calories)} kcal</b>
-                  </div>
-                  <div className="food-library-macros">
-                    <span>蛋白质 {numberFormat.format(food.protein)}g</span>
-                    <span>碳水 {numberFormat.format(food.carbs)}g</span>
-                    <span>脂肪 {numberFormat.format(food.fat)}g</span>
-                  </div>
-                  <div className="food-library-actions">
-                    <button className={food.isFavorite ? 'favorite' : ''} aria-label={food.isFavorite ? `取消收藏${food.name}` : `收藏${food.name}`} onClick={() => void toggleFavorite(food)}><Star size={17} fill={food.isFavorite ? 'currentColor' : 'none'} /></button>
-                    {food.isCustom && <button aria-label={`删除${food.name}`} onClick={() => void remove(food)}><Trash2 size={17} /></button>}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+          {loading
+            ? <p className="data-status">正在读取食物库…</p>
+            : foods.length === 0
+              ? <p className="empty-state">没有找到匹配的食物。</p>
+              : (
+                <div className="food-library-list">
+                  {foods.map((food) => (
+                    <article className="food-library-item" key={food.id}>
+                      <div className="food-library-main">
+                        <div>
+                          <strong>{food.name}</strong>
+                          <span>{food.category} · 每 {numberFormat.format(food.baseAmount)}{food.baseUnit}</span>
+                        </div>
+                        <b>{numberFormat.format(food.calories)} kcal</b>
+                      </div>
+                      <div className="food-library-macros">
+                        <span>蛋白质 {numberFormat.format(food.protein)}g</span>
+                        <span>碳水 {numberFormat.format(food.carbs)}g</span>
+                        <span>脂肪 {numberFormat.format(food.fat)}g</span>
+                      </div>
+                      <div className="food-library-controls">
+                        {onRecordFood && (
+                          <button
+                            type="button"
+                            className="record-food"
+                            onClick={() => onRecordFood(food)}
+                          >
+                            <Plus size={15} />记录到饮食
+                          </button>
+                        )}
+                        <div className="food-library-icon-actions">
+                          <button
+                            type="button"
+                            className={food.isFavorite ? 'favorite' : ''}
+                            aria-label={food.isFavorite ? `取消收藏${food.name}` : `收藏${food.name}`}
+                            title={food.isFavorite ? '取消收藏' : '收藏'}
+                            onClick={() => void toggleFavorite(food)}
+                          >
+                            <Star size={17} fill={food.isFavorite ? 'currentColor' : 'none'} />
+                          </button>
+                          {food.isCustom && (
+                            <button
+                              type="button"
+                              aria-label={`删除${food.name}`}
+                              title="删除自定义食物"
+                              onClick={() => void remove(food)}
+                            >
+                              <Trash2 size={17} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
         </section>
 
         <form className="panel custom-food-form" onSubmit={submit}>
-          <div className="panel-title"><div><p className="eyebrow">新建项目</p><h2>添加自定义食物</h2></div><Plus size={20} /></div>
+          <div className="panel-title">
+            <div><p className="eyebrow">新建项目</p><h2>添加自定义食物</h2></div>
+            <Plus size={20} />
+          </div>
           <div className="goal-fields">
             <label>食物名称<input name="name" required placeholder="例如：自制鸡肉饭" /></label>
-            <label>分类<select name="category" defaultValue="其他">{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
+            <label>
+              分类
+              <select name="category" defaultValue="其他">
+                {categories.map((category) => <option key={category}>{category}</option>)}
+              </select>
+            </label>
             <label>基准数量<input name="baseAmount" type="number" min="0.1" step="0.1" defaultValue="100" required /></label>
             <label>单位<input name="baseUnit" defaultValue="g" required /></label>
             <label>热量 kcal<input name="calories" type="number" min="0" step="0.1" required /></label>
@@ -165,7 +227,9 @@ export function FoodLibrary() {
             <label>碳水 g<input name="carbs" type="number" min="0" step="0.1" defaultValue="0" required /></label>
             <label>脂肪 g<input name="fat" type="number" min="0" step="0.1" defaultValue="0" required /></label>
           </div>
-          <button className="primary" type="submit" disabled={saving}><Plus size={16} />{saving ? '保存中…' : '保存到食物库'}</button>
+          <button className="primary" type="submit" disabled={saving}>
+            <Plus size={16} />{saving ? '保存中…' : '保存到食物库'}
+          </button>
         </form>
       </div>
     </section>

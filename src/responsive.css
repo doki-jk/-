@@ -1,0 +1,366 @@
+/* Stability and responsive layout overrides. Loaded after the page-specific styles. */
+
+body {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.app-shell > aside {
+  min-width: 0;
+}
+
+.goal-settings {
+  margin-left: 0;
+  padding: 0;
+  background: transparent;
+  border-top: 0;
+}
+
+.app-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px 16px;
+  border: 1px solid rgba(99, 131, 21, 0.28);
+  border-radius: 12px;
+  background: #183a2a;
+  color: #fff;
+  box-shadow: 0 18px 44px rgba(16, 42, 29, 0.26);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.prefill-hint {
+  margin: -4px 0 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f0f6e8;
+  color: #53672a;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.food-library-item {
+  padding-right: 15px;
+}
+
+.food-library-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid #edf0ed;
+}
+
+.record-food {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #cbd8ab;
+  border-radius: 9px;
+  background: #eff5e5;
+  color: #58751b;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 11px;
+}
+
+.record-food:hover {
+  background: #e6f0d5;
+  border-color: #aebe79;
+}
+
+.food-library-icon-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.food-library-icon-actions button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #98a39d;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.food-library-icon-actions button:hover {
+  background: #eef2ee;
+  color: #314139;
+}
+
+.food-library-icon-actions button.favorite {
+  color: #7da52a;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    display: block;
+    min-height: 100vh;
+  }
+
+  .app-shell > aside {
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    padding: 10px 12px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 8px 24px rgba(9, 25, 16, 0.18);
+  }
+
+  .app-shell > aside .brand {
+    padding: 0;
+  }
+
+  .app-shell > aside .brand > div:last-child,
+  .app-shell > aside .profile {
+    display: none;
+  }
+
+  .app-shell > aside nav {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .app-shell > aside nav button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 10px 12px;
+  }
+
+  main {
+    padding: 22px 20px 40px;
+    overflow: visible;
+  }
+
+  header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .right-column {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .food-library-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-food-form .goal-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .body-data-grid,
+  .analysis-grid,
+  .goal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .meal-records-heading {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell > aside {
+    grid-template-columns: 1fr;
+    padding: 8px;
+  }
+
+  .app-shell > aside .brand {
+    display: none;
+  }
+
+  .app-shell > aside nav button {
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+
+  main {
+    padding: 16px 14px 34px;
+  }
+
+  h1 {
+    font-size: 23px;
+    line-height: 1.25;
+  }
+
+  h2 {
+    font-size: 17px;
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .header-actions .date-picker {
+    grid-column: 1 / -1;
+  }
+
+  .header-actions > button {
+    width: 100%;
+    justify-content: center;
+    padding: 0 10px;
+  }
+
+  .hero {
+    padding: 22px 18px;
+    border-radius: 18px;
+  }
+
+  .hero strong {
+    font-size: 31px;
+  }
+
+  .hero small {
+    font-size: 13px;
+  }
+
+  .hero-ring {
+    width: 72px;
+    height: 72px;
+    flex: 0 0 auto;
+  }
+
+  .hero-ring::after {
+    inset: 7px;
+  }
+
+  .macro-grid,
+  .food-library-summary,
+  .body-summary-grid,
+  .analysis-summary-grid,
+  .meal-record-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    padding: 16px;
+  }
+
+  .panel-title {
+    gap: 12px;
+  }
+
+  .food-row {
+    padding-left: 0;
+    gap: 10px;
+  }
+
+  .food-row > div:last-child {
+    flex: 0 0 auto;
+  }
+
+  .empty-add {
+    margin-left: 0;
+  }
+
+  .form-grid,
+  .goal-fields,
+  .custom-food-form .goal-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .food-toolbar {
+    flex-direction: column;
+  }
+
+  .food-toolbar button {
+    justify-content: center;
+  }
+
+  .food-library-main {
+    gap: 8px;
+  }
+
+  .food-library-controls {
+    align-items: stretch;
+  }
+
+  .record-food {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .body-record,
+  .meal-record-row {
+    grid-template-columns: 1fr;
+  }
+
+  .body-record-values,
+  .meal-record-macros {
+    grid-column: auto;
+  }
+
+  .meal-record-row > strong,
+  .meal-record-row > button {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .meal-record-row > button {
+    justify-self: end;
+  }
+
+  .analysis-chart,
+  .chart {
+    height: 220px;
+  }
+
+  .modal-backdrop {
+    padding: 10px 0 0;
+    align-items: end;
+  }
+
+  .food-modal {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 18px 18px 0 0;
+    padding: 18px 16px;
+  }
+
+  .modal-actions {
+    position: sticky;
+    bottom: -18px;
+    margin: 20px -16px -18px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 1px solid #e7ebe8;
+    backdrop-filter: blur(10px);
+  }
+
+  .app-toast {
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    max-width: none;
+  }
+}
