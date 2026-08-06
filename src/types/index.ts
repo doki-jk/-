@@ -6,6 +6,7 @@ export interface FoodEntry {
   name: string;
   meal: MealType;
   consumedAt?: string;
+  trackUsage?: boolean;
   amount: number;
   unit: string;
   calories: number;
