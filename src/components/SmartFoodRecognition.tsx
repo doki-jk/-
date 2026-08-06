@@ -1,4 +1,4 @@
-import { Check, LoaderCircle, Search, Sparkles } from 'lucide-react';
+import { AlertTriangle, Check, LoaderCircle, Search, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import {
   recognizeFoodText,
@@ -8,6 +8,7 @@ import '../smart-food.css';
 
 const examples = ['200g鸡胸肉', '2个鸡蛋', '一碗米饭', '250ml牛奶', '1勺蛋白粉'];
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 });
+const DIRECT_APPLY_THRESHOLD = 70;
 
 interface SmartFoodRecognitionProps {
   onApply: (result: FoodRecognitionResult) => void;
@@ -54,12 +55,14 @@ export function SmartFoodRecognition({ onApply }: SmartFoodRecognitionProps) {
     void recognize(example);
   }
 
+  const safeToApply = Boolean(result && result.confidence >= DIRECT_APPLY_THRESHOLD);
+
   return (
     <section className="smart-food-card" aria-labelledby="smart-food-title">
       <div className="smart-food-heading">
         <div className="smart-food-icon"><Sparkles size={19} /></div>
         <div>
-          <p className="eyebrow">本地智能识别</p>
+          <p className="eyebrow">本地食物匹配与份量估算</p>
           <h2 id="smart-food-title">一句话计算食物营养</h2>
           <p>输入“食物 + 份量”，自动匹配并估算热量、蛋白质、碳水和脂肪。</p>
         </div>
@@ -116,8 +119,18 @@ export function SmartFoodRecognition({ onApply }: SmartFoodRecognitionProps) {
           </div>
 
           <p className="smart-food-note">{result.note}</p>
-          <button className="record-food smart-food-apply" type="button" onClick={() => onApply(result)}>
-            <Check size={16} />使用识别结果并记录
+          {!safeToApply && (
+            <p className="smart-food-error" role="alert">
+              <AlertTriangle size={15} />置信度低于 {DIRECT_APPLY_THRESHOLD}%，为避免记错数据，请修改描述或改用手动录入。
+            </p>
+          )}
+          <button
+            className="record-food smart-food-apply"
+            type="button"
+            disabled={!safeToApply}
+            onClick={() => safeToApply && onApply(result)}
+          >
+            <Check size={16} />{safeToApply ? '使用识别结果并记录' : '低置信度，暂不可记录'}
           </button>
         </article>
       )}
