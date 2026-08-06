@@ -2,13 +2,17 @@ import { useMemo } from 'react';
 import { Apple, CalendarDays, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useNutritionStore } from '../store/useNutritionStore';
 import type { FoodEntry, MealType } from '../types';
+import { localDateKey } from '../utils/date';
 import '../meal-records.css';
 
 const meals: MealType[] = ['早餐', '午餐', '晚餐', '加餐'];
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 });
 
-function localDateKey(date = new Date()): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+function timeLabel(value?: string): string {
+  if (!value) return '--:--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '--:--';
+  return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
 }
 
 interface MealRecordsProps {
@@ -63,7 +67,7 @@ export function MealRecords({ onAddFood, onEditFood, onDeleteFood }: MealRecords
               </div>
               {entries.length === 0 ? <p className="empty-state">这一餐还没有记录。</p> : entries.map((food) => (
                 <article className="meal-record-row" key={food.id}>
-                  <div><strong>{food.name}</strong><span>{numberFormat.format(food.amount)} {food.unit}</span></div>
+                  <div><strong>{food.name}</strong><span>{timeLabel(food.consumedAt)} · {numberFormat.format(food.amount)} {food.unit}</span></div>
                   <div className="meal-record-macros"><span>蛋白 {numberFormat.format(food.protein)}g</span><span>碳水 {numberFormat.format(food.carbs)}g</span><span>脂肪 {numberFormat.format(food.fat)}g</span></div>
                   <strong>{numberFormat.format(food.calories)} kcal</strong>
                   <div className="row-actions">
