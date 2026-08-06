@@ -7,6 +7,10 @@ type Migration = {
   statements: string[];
 };
 
+type TableColumn = {
+  name: string;
+};
+
 const migrations: Migration[] = [
   {
     version: 1,
@@ -129,6 +133,51 @@ async function applyMigration(db: Database, migration: Migration): Promise<void>
   }
 }
 
+async function ensureColumn(
+  db: Database,
+  table: 'foods' | 'meal_entries',
+  column: string,
+  definition: string,
+): Promise<void> {
+  const columns = await db.select<TableColumn[]>(`PRAGMA table_info(${table})`);
+  if (columns.some((item) => item.name === column)) return;
+  await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+async function repairLegacySchema(db: Database): Promise<void> {
+  await ensureColumn(db, 'foods', 'base_amount', 'REAL NOT NULL DEFAULT 100');
+  await ensureColumn(db, 'foods', 'base_unit', "TEXT NOT NULL DEFAULT 'g'");
+  await ensureColumn(db, 'foods', 'is_favorite', 'INTEGER NOT NULL DEFAULT 0');
+  await ensureColumn(db, 'foods', 'is_custom', 'INTEGER NOT NULL DEFAULT 0');
+  await ensureColumn(db, 'foods', 'usage_count', 'INTEGER NOT NULL DEFAULT 0');
+  await ensureColumn(db, 'foods', 'updated_at', "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, 'meal_entries', 'food_id', 'TEXT');
+  await ensureColumn(db, 'meal_entries', 'updated_at', "TEXT NOT NULL DEFAULT ''");
+
+  const now = new Date().toISOString();
+  await db.execute(
+    `UPDATE foods
+     SET updated_at = CASE
+       WHEN updated_at IS NULL OR updated_at = '' THEN COALESCE(created_at, ?)
+       ELSE updated_at
+     END`,
+    [now],
+  );
+  await db.execute(
+    `UPDATE meal_entries
+     SET updated_at = CASE
+       WHEN updated_at IS NULL OR updated_at = '' THEN COALESCE(created_at, ?)
+       ELSE updated_at
+     END`,
+    [now],
+  );
+
+  await db.execute('CREATE INDEX IF NOT EXISTS idx_foods_name ON foods(name)');
+  await db.execute('CREATE INDEX IF NOT EXISTS idx_foods_usage ON foods(is_favorite DESC, usage_count DESC)');
+  await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_entries_date ON meal_entries(consumed_at)');
+  await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_entries_type ON meal_entries(meal_type)');
+}
+
 export async function initializeDatabase(): Promise<void> {
   const db = await getDatabase();
   await db.execute(`CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -147,4 +196,6 @@ export async function initializeDatabase(): Promise<void> {
       await applyMigration(db, migration);
     }
   }
+
+  await repairLegacySchema(db);
 }
