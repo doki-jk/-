@@ -309,7 +309,7 @@ export async function createFuelLogBackup(): Promise<FuelLogBackup> {
   return {
     format: 'fuellog-backup',
     version: 1,
-    appVersion: '0.3.0',
+    appVersion: '0.3.2',
     exportedAt: new Date().toISOString(),
     data: { foods, meals, goals: { training, rest }, bodyRecords, dailyPlans, profile },
   };
