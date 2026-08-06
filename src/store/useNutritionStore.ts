@@ -4,6 +4,7 @@ import { dayPlanRepository } from '../repositories/dayPlanRepository';
 import { goalRepository, type DayType } from '../repositories/goalRepository';
 import { mealRepository } from '../repositories/mealRepository';
 import type { DailyGoal, FoodEntry } from '../types';
+import { assertDateKey, localDateFromKey, localDateKey } from '../utils/date';
 
 interface State {
   foods: FoodEntry[];
@@ -21,6 +22,8 @@ interface State {
   removeFood: (id: string) => Promise<FoodEntry>;
   toggleTrainingDay: () => Promise<void>;
 }
+
+let dateLoadSequence = 0;
 
 function describeError(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) return error.message;
@@ -42,23 +45,10 @@ function describeError(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function localDateKey(date = new Date()): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function assertDateKey(value: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00`))) {
-    throw new Error('日期格式必须为 YYYY-MM-DD');
-  }
-}
-
 function selectedDateTime(date: string): string {
-  assertDateKey(date);
   const now = new Date();
-  const value = new Date(`${date}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`);
+  const value = localDateFromKey(date, now.getHours());
+  value.setMinutes(now.getMinutes(), now.getSeconds(), 0);
   return value.toISOString();
 }
 
@@ -99,6 +89,7 @@ export const useNutritionStore = create<State>()(
           return;
         }
 
+        const requestId = ++dateLoadSequence;
         set({ loading: true, error: null });
         try {
           const entries = await mealRepository.getByDate(date);
@@ -108,6 +99,7 @@ export const useNutritionStore = create<State>()(
             const fallbackGoal = await goalRepository.get(fallbackType);
             plan = await dayPlanRepository.save(date, fallbackType, fallbackGoal);
           }
+          if (requestId !== dateLoadSequence) return;
           set({
             selectedDate: date,
             foods: entries.map(toFoodEntry),
@@ -117,6 +109,7 @@ export const useNutritionStore = create<State>()(
             error: null,
           });
         } catch (error) {
+          if (requestId !== dateLoadSequence) return;
           set({ loading: false, error: describeError(error, '读取饮食记录失败') });
         }
       },
