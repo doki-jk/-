@@ -1,14 +1,23 @@
 import { AlertTriangle, Check, LoaderCircle, Search, Sparkles } from 'lucide-react';
 import { useState } from 'react';
+import type { Food } from '../repositories/foodRepository';
 import {
-  recognizeFoodText,
+  confirmFoodSuggestion,
+  recognizeFoodBatchText,
   type FoodRecognitionResult,
 } from '../services/foodRecognition';
 import '../smart-food.css';
 
-const examples = ['200g鸡胸肉', '2个鸡蛋', '一碗米饭', '250ml牛奶', '1勺蛋白粉'];
+const examples = ['200g鸡胸肉', '2个鸡蛋', '一碗米饭', '250ml牛奶', '200g鸡胸肉 + 一碗米饭'];
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 });
 const DIRECT_APPLY_THRESHOLD = 70;
+
+type RecognitionItem = {
+  text: string;
+  result: FoodRecognitionResult | null;
+  suggestions: Array<{ food: Food; score: number }>;
+  error: string;
+};
 
 interface SmartFoodRecognitionProps {
   onApply: (result: FoodRecognitionResult) => void;
@@ -17,28 +26,33 @@ interface SmartFoodRecognitionProps {
 export function SmartFoodRecognition({ onApply }: SmartFoodRecognitionProps) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<FoodRecognitionResult | null>(null);
-  const [suggestions, setSuggestions] = useState<Array<{ name: string; score: number }>>([]);
+  const [items, setItems] = useState<RecognitionItem[]>([]);
   const [error, setError] = useState('');
+  const [batchMode, setBatchMode] = useState(false);
 
   async function recognize(value = query) {
     const normalized = value.trim();
     if (!normalized) {
       setError('请输入食物和份量。');
-      setResult(null);
+      setItems([]);
       return;
     }
 
     setLoading(true);
     setError('');
     try {
-      const response = await recognizeFoodText(normalized);
-      setResult(response.result);
-      setSuggestions(response.suggestions.map((item) => ({ name: item.food.name, score: item.score })));
+      const response = await recognizeFoodBatchText(normalized);
+      setBatchMode(response.isBatch);
+      setItems(response.items.map((item) => ({
+        text: item.text,
+        result: item.response.result,
+        suggestions: item.response.suggestions,
+        error: item.response.error ?? '',
+      })));
       setError(response.error ?? '');
     } catch (recognitionError) {
-      setResult(null);
-      setSuggestions([]);
+      setItems([]);
+      setBatchMode(false);
       setError(recognitionError instanceof Error ? recognitionError.message : '识别失败，请重试。');
     } finally {
       setLoading(false);
@@ -55,7 +69,18 @@ export function SmartFoodRecognition({ onApply }: SmartFoodRecognitionProps) {
     void recognize(example);
   }
 
-  const safeToApply = Boolean(result && result.confidence >= DIRECT_APPLY_THRESHOLD);
+  async function selectSuggestion(index: number, food: Food) {
+    try {
+      const selected = await confirmFoodSuggestion(items[index].text, food);
+      setItems((current) => current.map((item, itemIndex) => itemIndex === index
+        ? { ...item, result: selected, error: '' }
+        : item));
+    } catch (selectionError) {
+      setItems((current) => current.map((item, itemIndex) => itemIndex === index
+        ? { ...item, error: selectionError instanceof Error ? selectionError.message : '候选确认失败' }
+        : item));
+    }
+  }
 
   return (
     <section className="smart-food-card" aria-labelledby="smart-food-title">
@@ -64,7 +89,7 @@ export function SmartFoodRecognition({ onApply }: SmartFoodRecognitionProps) {
         <div>
           <p className="eyebrow">本地食物匹配与份量估算</p>
           <h2 id="smart-food-title">一句话计算食物营养</h2>
-          <p>输入“食物 + 份量”，自动匹配并估算热量、蛋白质、碳水和脂肪。</p>
+          <p>输入一个或多个“食物 + 份量”，用逗号、顿号、加号或“和”分隔。</p>
         </div>
       </div>
 
@@ -74,8 +99,8 @@ export function SmartFoodRecognition({ onApply }: SmartFoodRecognitionProps) {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="例如：200g鸡胸肉、2个鸡蛋、一碗米饭"
-            aria-label="描述食物和份量"
+            placeholder="例如：200g鸡胸肉 + 一碗米饭"
+            aria-label="描述一个或多个食物和份量"
           />
         </label>
         <button className="primary" type="submit" disabled={loading}>
@@ -92,48 +117,73 @@ export function SmartFoodRecognition({ onApply }: SmartFoodRecognitionProps) {
       </div>
 
       {error && <p className="smart-food-error" role="alert">{error}</p>}
+      {batchMode && items.length > 0 && <p className="smart-food-suggestions">已拆分为 {items.length} 个食物，请逐项确认并记录。</p>}
 
-      {!result && suggestions.length > 0 && (
-        <p className="smart-food-suggestions">
-          可能相关：{suggestions.map((item) => `${item.name} ${numberFormat.format(item.score)}%`).join('、')}
-        </p>
-      )}
+      <div className={batchMode ? 'smart-food-result-list' : undefined}>
+        {items.map((item, index) => {
+          const result = item.result;
+          const safeToApply = Boolean(result && result.confidence >= DIRECT_APPLY_THRESHOLD);
+          return (
+            <article className="smart-food-result" key={`${item.text}-${index}`}>
+              {batchMode && <p className="smart-food-segment">原始片段：{item.text}</p>}
 
-      {result && (
-        <article className="smart-food-result">
-          <div className="smart-food-result-title">
-            <div>
-              <span>识别为</span>
-              <strong>{result.food.name} · {numberFormat.format(result.amount)}{result.unit}</strong>
-            </div>
-            <b className={`confidence confidence-${result.confidenceLabel}`}>
-              置信度 {result.confidenceLabel} {numberFormat.format(result.confidence)}%
-            </b>
-          </div>
+              {result ? (
+                <>
+                  <div className="smart-food-result-title">
+                    <div>
+                      <span>识别为</span>
+                      <strong>{result.food.name} · {numberFormat.format(result.amount)}{result.unit}</strong>
+                    </div>
+                    <b className={`confidence confidence-${result.confidenceLabel}`}>
+                      置信度 {result.confidenceLabel} {numberFormat.format(result.confidence)}%
+                    </b>
+                  </div>
 
-          <div className="smart-food-macros">
-            <div><span>热量</span><strong>{numberFormat.format(result.nutrition.calories)}</strong><small>kcal</small></div>
-            <div><span>蛋白质</span><strong>{numberFormat.format(result.nutrition.protein)}</strong><small>g</small></div>
-            <div><span>碳水</span><strong>{numberFormat.format(result.nutrition.carbs)}</strong><small>g</small></div>
-            <div><span>脂肪</span><strong>{numberFormat.format(result.nutrition.fat)}</strong><small>g</small></div>
-          </div>
+                  <div className="smart-food-macros">
+                    <div><span>热量</span><strong>{numberFormat.format(result.nutrition.calories)}</strong><small>kcal</small></div>
+                    <div><span>蛋白质</span><strong>{numberFormat.format(result.nutrition.protein)}</strong><small>g</small></div>
+                    <div><span>碳水</span><strong>{numberFormat.format(result.nutrition.carbs)}</strong><small>g</small></div>
+                    <div><span>脂肪</span><strong>{numberFormat.format(result.nutrition.fat)}</strong><small>g</small></div>
+                  </div>
 
-          <p className="smart-food-note">{result.note}</p>
-          {!safeToApply && (
-            <p className="smart-food-error" role="alert">
-              <AlertTriangle size={15} />置信度低于 {DIRECT_APPLY_THRESHOLD}%，为避免记错数据，请修改描述或改用手动录入。
-            </p>
-          )}
-          <button
-            className="record-food smart-food-apply"
-            type="button"
-            disabled={!safeToApply}
-            onClick={() => safeToApply && onApply(result)}
-          >
-            <Check size={16} />{safeToApply ? '使用识别结果并记录' : '低置信度，暂不可记录'}
-          </button>
-        </article>
-      )}
+                  <p className="smart-food-note">{result.note}</p>
+                  {!safeToApply && (
+                    <p className="smart-food-error" role="alert">
+                      <AlertTriangle size={15} />匹配置信度不足。请选择下方候选确认食物，或改用手动录入。
+                    </p>
+                  )}
+                </>
+              ) : item.error ? <p className="smart-food-error" role="alert">{item.error}</p> : null}
+
+              {item.suggestions.length > 0 && (!safeToApply || !result) && (
+                <div className="smart-food-candidates" aria-label={`${item.text}的候选食物`}>
+                  <span>选择候选：</span>
+                  {item.suggestions.map((suggestion) => (
+                    <button
+                      type="button"
+                      key={suggestion.food.id}
+                      onClick={() => void selectSuggestion(index, suggestion.food)}
+                    >
+                      {suggestion.food.name} {numberFormat.format(suggestion.score)}%
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {result && (
+                <button
+                  className="record-food smart-food-apply"
+                  type="button"
+                  disabled={!safeToApply}
+                  onClick={() => safeToApply && onApply(result)}
+                >
+                  <Check size={16} />{safeToApply ? '使用这项结果并记录' : '确认候选后才能记录'}
+                </button>
+              )}
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 }
