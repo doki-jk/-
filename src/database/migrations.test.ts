@@ -32,4 +32,17 @@ describe('database migrations', () => {
       sql.startsWith('INSERT INTO schema_migrations'));
     expect(markers).toHaveLength(3);
   });
+
+  it('repairs legacy goal IDs before creating the unique upsert target', async () => {
+    await initializeDatabase();
+
+    const statements = mocks.execute.mock.calls.map(([sql]) => String(sql));
+    const repairIndex = statements.findIndex((sql) =>
+      sql.includes("SET id = 'legacy-goal-' || lower(hex(randomblob(16)))"));
+    const uniqueIndex = statements.findIndex((sql) =>
+      sql.includes('CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_goals_id_unique'));
+
+    expect(repairIndex).toBeGreaterThanOrEqual(0);
+    expect(uniqueIndex).toBeGreaterThan(repairIndex);
+  });
 });
