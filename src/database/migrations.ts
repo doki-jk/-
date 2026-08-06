@@ -93,6 +93,22 @@ const migrations: Migration[] = [
       )`,
       `CREATE INDEX IF NOT EXISTS idx_daily_plans_type ON daily_plans(day_type)`
     ]
+  },
+  {
+    version: 3,
+    name: 'goal_recommendation_profile',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS user_profile (
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        sex TEXT NOT NULL CHECK(sex IN ('male','female')),
+        age INTEGER NOT NULL CHECK(age >= 14 AND age <= 100),
+        height_cm REAL NOT NULL CHECK(height_cm >= 120 AND height_cm <= 230),
+        weight_kg REAL NOT NULL CHECK(weight_kg >= 30 AND weight_kg <= 300),
+        activity_level TEXT NOT NULL CHECK(activity_level IN ('sedentary','light','moderate','high')),
+        objective TEXT NOT NULL CHECK(objective IN ('cut','maintain','gain')),
+        updated_at TEXT NOT NULL
+      )`
+    ]
   }
 ];
 
