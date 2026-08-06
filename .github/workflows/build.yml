@@ -21,9 +21,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install locked dependencies
+        run: npm ci
 
       - name: Capture dependency audit
         if: always()
@@ -47,13 +48,8 @@ jobs:
       - name: Build web application
         run: npm run build
 
-      - name: Upload npm lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-lockfile
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 7
+      - name: Verify lockfile unchanged
+        run: git diff --exit-code -- package-lock.json
 
   desktop-check:
     runs-on: ubuntu-latest
@@ -81,28 +77,15 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Set up Rust
-        run: |
-          rustup default stable
-          rustup update stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
-        uses: actions/cache@v4
+        uses: swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          workspaces: src-tauri -> target
 
       - name: Check Tauri backend
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+        run: cargo check --locked --manifest-path src-tauri/Cargo.toml
 
-      - name: Upload Cargo lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: cargo-lockfile
-          path: src-tauri/Cargo.lock
-          if-no-files-found: error
-          retention-days: 7
+      - name: Verify Cargo lockfile unchanged
+        run: git diff --exit-code -- src-tauri/Cargo.lock
