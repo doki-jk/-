@@ -6,6 +6,7 @@ import {
 } from '../database/browserStorage';
 import { getDatabase, isTauriRuntime } from '../database/client';
 import type { MealType } from '../types';
+import { foodRepository } from './foodRepository';
 
 export interface MealEntry {
   id: string;
@@ -156,6 +157,7 @@ export const mealRepository = {
         updatedAt: now,
       };
       writeBrowserData('meal-entries', [...browserEntries(), entry]);
+      if (entry.foodId) await foodRepository.incrementUsage(entry.foodId);
       return entry;
     }
 
@@ -182,25 +184,76 @@ export const mealRepository = {
         now,
       ],
     );
-    if (input.foodId) {
-      await db.execute(
-        'UPDATE foods SET usage_count = usage_count + 1, updated_at = ? WHERE id = ?',
-        [now, input.foodId],
-      );
-    }
+    if (input.foodId) await foodRepository.incrementUsage(input.foodId);
     const rows = await db.select<MealEntryRow[]>('SELECT * FROM meal_entries WHERE id = ?', [id]);
     if (!rows[0]) throw new Error('饮食记录保存后未能读取');
     return mapRow(rows[0]);
   },
 
+  async update(id: string, input: CreateMealEntryInput): Promise<MealEntry> {
+    validate(input);
+    const updatedAt = new Date().toISOString();
+
+    if (!isTauriRuntime()) {
+      const entries = browserEntries();
+      const existing = entries.find((entry) => entry.id === id);
+      if (!existing) throw new Error('找不到要修改的饮食记录');
+      const updated: MealEntry = {
+        ...existing,
+        foodId: input.foodId ?? null,
+        foodName: input.foodName.trim(),
+        mealType: input.mealType,
+        consumedAt: input.consumedAt,
+        amount: input.amount,
+        unit: input.unit.trim(),
+        calories: input.calories,
+        protein: input.protein,
+        carbs: input.carbs,
+        fat: input.fat,
+        updatedAt,
+      };
+      writeBrowserData('meal-entries', entries.map((entry) => entry.id === id ? updated : entry));
+      return updated;
+    }
+
+    const db = await getDatabase();
+    const result = await db.execute(
+      `UPDATE meal_entries SET
+        food_id = ?, food_name = ?, meal_type = ?, consumed_at = ?, amount = ?, unit = ?,
+        calories = ?, protein = ?, carbs = ?, fat = ?, updated_at = ?
+       WHERE id = ?`,
+      [
+        input.foodId ?? null,
+        input.foodName.trim(),
+        input.mealType,
+        input.consumedAt,
+        input.amount,
+        input.unit.trim(),
+        input.calories,
+        input.protein,
+        input.carbs,
+        input.fat,
+        updatedAt,
+        id,
+      ],
+    );
+    if (result.rowsAffected === 0) throw new Error('找不到要修改的饮食记录');
+    const rows = await db.select<MealEntryRow[]>('SELECT * FROM meal_entries WHERE id = ?', [id]);
+    if (!rows[0]) throw new Error('饮食记录修改后未能读取');
+    return mapRow(rows[0]);
+  },
+
   async remove(id: string): Promise<void> {
     if (!isTauriRuntime()) {
-      writeBrowserData('meal-entries', browserEntries().filter((entry) => entry.id !== id));
+      const entries = browserEntries();
+      if (!entries.some((entry) => entry.id === id)) throw new Error('找不到要删除的饮食记录');
+      writeBrowserData('meal-entries', entries.filter((entry) => entry.id !== id));
       return;
     }
 
     const db = await getDatabase();
-    await db.execute('DELETE FROM meal_entries WHERE id = ?', [id]);
+    const result = await db.execute('DELETE FROM meal_entries WHERE id = ?', [id]);
+    if (result.rowsAffected === 0) throw new Error('找不到要删除的饮食记录');
   },
 
   async getDailySummary(date: string): Promise<DailyNutritionSummary> {
