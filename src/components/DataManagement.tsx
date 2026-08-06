@@ -6,6 +6,7 @@ import {
   parseFuelLogBackup,
   restoreFuelLogBackup,
 } from '../services/dataBackup';
+import { assertBackupFileSize } from '../services/backupFileLimits';
 import '../data-management.css';
 
 function downloadText(filename: string, text: string, type: string) {
@@ -62,10 +63,18 @@ export function DataManagement() {
   }
 
   async function importFile(file: File) {
-    if (!window.confirm('恢复备份会覆盖当前设备上的全部 FuelLog 数据。请确认已经导出当前数据。')) return;
-    setBusy(true);
     setMessage('');
     setError('');
+    try {
+      assertBackupFileSize(file);
+    } catch (sizeError) {
+      setError(sizeError instanceof Error ? sizeError.message : '备份文件大小无效');
+      if (fileInput.current) fileInput.current.value = '';
+      return;
+    }
+
+    if (!window.confirm('恢复备份会覆盖当前设备上的全部 FuelLog 数据。请确认已经导出当前数据。')) return;
+    setBusy(true);
     try {
       const backup = parseFuelLogBackup(await file.text());
       await restoreFuelLogBackup(backup);
