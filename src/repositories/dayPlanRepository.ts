@@ -1,6 +1,7 @@
 import { readBrowserData, writeBrowserData } from '../database/browserStorage';
 import { getDatabase, isTauriRuntime } from '../database/client';
 import type { DailyGoal } from '../types';
+import { assertDateKey } from '../utils/date';
 import type { DayType } from './goalRepository';
 
 export interface DailyPlan {
@@ -18,12 +19,6 @@ interface DailyPlanRow {
   carbs: number;
   fat: number;
   updated_at: string;
-}
-
-function assertDate(value: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00`))) {
-    throw new Error('日期格式必须为 YYYY-MM-DD');
-  }
 }
 
 function validateGoal(goal: DailyGoal): void {
@@ -57,7 +52,7 @@ function mapRow(row: DailyPlanRow): DailyPlan {
 
 export const dayPlanRepository = {
   async get(date: string): Promise<DailyPlan | null> {
-    assertDate(date);
+    assertDateKey(date);
     if (!isTauriRuntime()) return browserPlans()[date] ?? null;
 
     const db = await getDatabase();
@@ -76,7 +71,7 @@ export const dayPlanRepository = {
   },
 
   async save(date: string, dayType: DayType, goal: DailyGoal): Promise<DailyPlan> {
-    assertDate(date);
+    assertDateKey(date);
     validateGoal(goal);
     const updatedAt = new Date().toISOString();
     const plan: DailyPlan = { date, dayType, goal: { ...goal }, updatedAt };
