@@ -52,12 +52,22 @@ function selectedDateTime(date: string): string {
   return value.toISOString();
 }
 
+function resolveConsumedAt(food: FoodEntry, selectedDate: string): string {
+  if (food.consumedAt) {
+    const value = new Date(food.consumedAt);
+    if (Number.isNaN(value.getTime())) throw new Error('饮食时间无效');
+    return value.toISOString();
+  }
+  return selectedDateTime(selectedDate);
+}
+
 function toFoodEntry(entry: Awaited<ReturnType<typeof mealRepository.add>>): FoodEntry {
   return {
     id: entry.id,
     foodId: entry.foodId,
     name: entry.foodName,
     meal: entry.mealType,
+    consumedAt: entry.consumedAt,
     amount: entry.amount,
     unit: entry.unit,
     calories: entry.calories,
@@ -65,6 +75,10 @@ function toFoodEntry(entry: Awaited<ReturnType<typeof mealRepository.add>>): Foo
     carbs: entry.carbs,
     fat: entry.fat,
   };
+}
+
+function sortFoods(foods: FoodEntry[]): FoodEntry[] {
+  return [...foods].sort((left, right) => (left.consumedAt ?? '').localeCompare(right.consumedAt ?? ''));
 }
 
 export const useNutritionStore = create<State>()(
@@ -151,7 +165,7 @@ export const useNutritionStore = create<State>()(
             foodId: food.foodId ?? null,
             foodName: food.name,
             mealType: food.meal,
-            consumedAt: selectedDateTime(get().selectedDate),
+            consumedAt: resolveConsumedAt(food, get().selectedDate),
             amount: food.amount,
             unit: food.unit,
             calories: food.calories,
@@ -159,7 +173,7 @@ export const useNutritionStore = create<State>()(
             carbs: food.carbs,
             fat: food.fat,
           });
-          set((state) => ({ foods: [...state.foods, toFoodEntry(saved)] }));
+          set((state) => ({ foods: sortFoods([...state.foods, toFoodEntry(saved)]) }));
         } catch (error) {
           set({ error: describeError(error, '保存饮食记录失败') });
           throw error;
@@ -173,7 +187,7 @@ export const useNutritionStore = create<State>()(
             foodId: food.foodId ?? null,
             foodName: food.name,
             mealType: food.meal,
-            consumedAt: selectedDateTime(get().selectedDate),
+            consumedAt: resolveConsumedAt(food, get().selectedDate),
             amount: food.amount,
             unit: food.unit,
             calories: food.calories,
@@ -182,7 +196,7 @@ export const useNutritionStore = create<State>()(
             fat: food.fat,
           });
           set((state) => ({
-            foods: state.foods.map((entry) => entry.id === id ? toFoodEntry(saved) : entry),
+            foods: sortFoods(state.foods.map((entry) => entry.id === id ? toFoodEntry(saved) : entry)),
           }));
         } catch (error) {
           set({ error: describeError(error, '修改饮食记录失败') });
