@@ -172,7 +172,7 @@ export const useNutritionStore = create<State>()(
             protein: food.protein,
             carbs: food.carbs,
             fat: food.fat,
-          });
+          }, { trackUsage: food.trackUsage !== false });
           set((state) => ({ foods: sortFoods([...state.foods, toFoodEntry(saved)]) }));
         } catch (error) {
           set({ error: describeError(error, '保存饮食记录失败') });
