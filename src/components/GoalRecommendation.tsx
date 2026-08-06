@@ -22,8 +22,12 @@ const objectiveLabels: Record<GoalProfile['objective'], string> = {
   gain: '增肌',
 };
 
-export function GoalRecommendation() {
-  const saveGoal = useNutritionStore((state) => state.saveGoal);
+interface GoalRecommendationProps {
+  onApplied?: () => void;
+}
+
+export function GoalRecommendation({ onApplied }: GoalRecommendationProps) {
+  const applyGoals = useNutritionStore((state) => state.applyGoals);
   const [profile, setProfile] = useState<GoalProfile | null>(null);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [saving, setSaving] = useState(false);
@@ -39,6 +43,9 @@ export function GoalRecommendation() {
       } catch {
         setRecommendation(null);
       }
+    }).catch((error) => {
+      if (!active) return;
+      setMessage(error instanceof Error ? error.message : '读取个人资料失败');
     });
     return () => { active = false; };
   }, []);
@@ -77,11 +84,13 @@ export function GoalRecommendation() {
     setSaving(true);
     setMessage('');
     try {
-      await saveGoal('training', recommendation.training);
-      await saveGoal('rest', recommendation.rest);
-      setMessage('建议已应用到训练日和休息日目标。你仍可在下方手动调整。');
+      const warning = await applyGoals(recommendation.training, recommendation.rest);
+      onApplied?.();
+      setMessage(warning
+        ? `两种目标已保存，但当天目标同步出现警告：${warning}`
+        : '建议已应用到训练日和休息日目标。你仍可在下方手动调整。');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '应用建议失败');
+      setMessage(error instanceof Error ? error.message : `应用建议失败：${String(error)}`);
     } finally {
       setSaving(false);
     }
