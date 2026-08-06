@@ -1,4 +1,9 @@
-import { readBrowserData, writeBrowserData } from '../database/browserStorage';
+import type Database from '@tauri-apps/plugin-sql';
+import {
+  createLocalId,
+  readBrowserData,
+  writeBrowserData,
+} from '../database/browserStorage';
 import { getDatabase, isTauriRuntime } from '../database/client';
 import type { DailyGoal } from '../types';
 
@@ -33,6 +38,65 @@ function browserGoals(): Record<DayType, DailyGoal> {
   return readBrowserData('goals', defaults);
 }
 
+function databaseErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  if (error && typeof error === 'object') {
+    const candidate = error as { message?: unknown; error?: unknown; code?: unknown };
+    if (typeof candidate.message === 'string' && candidate.message.trim()) return candidate.message;
+    if (typeof candidate.error === 'string' && candidate.error.trim()) return candidate.error;
+    try {
+      const serialized = JSON.stringify(error);
+      if (serialized && serialized !== '{}') return serialized;
+    } catch {
+      // Fall through to a stable message.
+    }
+  }
+  return '数据库没有返回具体错误信息';
+}
+
+async function saveDesktopGoals(
+  db: Database,
+  updates: Array<[DayType, DailyGoal]>,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db.execute('BEGIN IMMEDIATE');
+  try {
+    for (const [dayType, goal] of updates) {
+      await db.execute(
+        `UPDATE nutrition_goals
+         SET effective_to = ?
+         WHERE day_type = ? AND effective_to IS NULL`,
+        [now, dayType],
+      );
+      await db.execute(
+        `INSERT INTO nutrition_goals(
+          id, goal_type, day_type, calories, protein, carbs, fat,
+          effective_from, effective_to, created_at
+        ) VALUES (?, 'daily_macro', ?, ?, ?, ?, ?, ?, NULL, ?)`,
+        [
+          createLocalId('goal'),
+          dayType,
+          goal.calories,
+          goal.protein,
+          goal.carbs,
+          goal.fat,
+          now,
+          now,
+        ],
+      );
+    }
+    await db.execute('COMMIT');
+  } catch (error) {
+    try {
+      await db.execute('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('回滚营养目标事务失败', rollbackError);
+    }
+    throw new Error(`SQLite 保存营养目标失败：${databaseErrorMessage(error)}`);
+  }
+}
+
 export const goalRepository = {
   defaults,
 
@@ -61,26 +125,25 @@ export const goalRepository = {
     }
 
     const db = await getDatabase();
-    const now = new Date().toISOString();
-    await db.execute('BEGIN IMMEDIATE');
-    try {
-      await db.execute(
-        `UPDATE nutrition_goals
-         SET effective_to = ?
-         WHERE day_type = ? AND effective_to IS NULL`,
-        [now, dayType],
-      );
-      await db.execute(
-        `INSERT INTO nutrition_goals(
-          id, goal_type, day_type, calories, protein, carbs, fat,
-          effective_from, effective_to, created_at
-        ) VALUES (?, 'daily_macro', ?, ?, ?, ?, ?, ?, NULL, ?)`,
-        [crypto.randomUUID(), dayType, goal.calories, goal.protein, goal.carbs, goal.fat, now, now],
-      );
-      await db.execute('COMMIT');
-    } catch (error) {
-      await db.execute('ROLLBACK');
-      throw error;
+    await saveDesktopGoals(db, [[dayType, goal]]);
+  },
+
+  async saveBoth(training: DailyGoal, rest: DailyGoal): Promise<void> {
+    validate(training);
+    validate(rest);
+
+    if (!isTauriRuntime()) {
+      writeBrowserData('goals', {
+        training: { ...training },
+        rest: { ...rest },
+      });
+      return;
     }
+
+    const db = await getDatabase();
+    await saveDesktopGoals(db, [
+      ['training', training],
+      ['rest', rest],
+    ]);
   },
 };
