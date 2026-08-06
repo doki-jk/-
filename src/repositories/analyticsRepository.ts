@@ -1,5 +1,5 @@
-import { localDateKey } from '../database/browserStorage';
 import { getDatabase, isTauriRuntime } from '../database/client';
+import { assertDateKey, localDateFromKey, localDateKey } from '../utils/date';
 import { mealRepository } from './mealRepository';
 
 export interface DailyNutritionPoint {
@@ -10,31 +10,25 @@ export interface DailyNutritionPoint {
   fat: number;
 }
 
-function assertDate(value: string, label: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00`))) {
-    throw new Error(`${label}格式必须为 YYYY-MM-DD`);
-  }
-}
-
 function localDayToIso(date: string): string {
-  return new Date(`${date}T00:00:00`).toISOString();
+  return localDateFromKey(date, 0).toISOString();
 }
 
 function nextLocalDayToIso(date: string): string {
-  const value = new Date(`${date}T00:00:00`);
+  const value = localDateFromKey(date, 0);
   value.setDate(value.getDate() + 1);
   return value.toISOString();
 }
 
 export const analyticsRepository = {
   async getDailyNutrition(startDate: string, endDate: string): Promise<DailyNutritionPoint[]> {
-    assertDate(startDate, '开始日期');
-    assertDate(endDate, '结束日期');
+    assertDateKey(startDate, '开始日期格式必须为 YYYY-MM-DD');
+    assertDateKey(endDate, '结束日期格式必须为 YYYY-MM-DD');
     if (startDate > endDate) throw new Error('开始日期不能晚于结束日期');
 
     if (!isTauriRuntime()) {
-      const start = new Date(`${startDate}T12:00:00`);
-      const end = new Date(`${endDate}T12:00:00`);
+      const start = localDateFromKey(startDate);
+      const end = localDateFromKey(endDate);
       const points: DailyNutritionPoint[] = [];
       for (const current = new Date(start); current <= end; current.setDate(current.getDate() + 1)) {
         const date = localDateKey(current);
