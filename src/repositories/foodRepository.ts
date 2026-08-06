@@ -1,16 +1,8 @@
+import { FOOD_CATALOG, type CatalogFoodCategory } from '../data/foodCatalog';
 import { createLocalId, readBrowserData, writeBrowserData } from '../database/browserStorage';
 import { getDatabase, isTauriRuntime } from '../database/client';
 
-export type FoodCategory =
-  | '蛋白质来源'
-  | '主食'
-  | '水果'
-  | '蔬菜'
-  | '乳制品'
-  | '坚果'
-  | '补剂'
-  | '常见外食'
-  | '其他';
+export type FoodCategory = CatalogFoodCategory;
 
 export interface Food {
   id: string;
@@ -80,9 +72,7 @@ function mapFood(row: FoodRow): Food {
 function validateFood(input: CreateFoodInput): void {
   if (!input.name.trim()) throw new Error('食物名称不能为空');
   if (!input.baseUnit.trim()) throw new Error('单位不能为空');
-  if (!Number.isFinite(input.baseAmount) || input.baseAmount <= 0) {
-    throw new Error('基准数量必须大于 0');
-  }
+  if (!Number.isFinite(input.baseAmount) || input.baseAmount <= 0) throw new Error('基准数量必须大于 0');
   for (const [label, value] of [
     ['热量', input.calories],
     ['蛋白质', input.protein],
@@ -93,53 +83,18 @@ function validateFood(input: CreateFoodInput): void {
   }
 }
 
-const seedDefinitions: Array<[
-  string,
-  string,
-  FoodCategory,
-  number,
-  string,
-  number,
-  number,
-  number,
-  number,
-]> = [
-  ['seed-chicken-breast', '鸡胸肉', '蛋白质来源', 100, 'g', 165, 31, 0, 3.6],
-  ['seed-egg', '鸡蛋', '蛋白质来源', 1, '个', 70, 6.3, 0.6, 4.8],
-  ['seed-beef', '瘦牛肉', '蛋白质来源', 100, 'g', 250, 26, 0, 15],
-  ['seed-rice', '熟米饭', '主食', 100, 'g', 116, 2.6, 25.9, 0.3],
-  ['seed-oats', '燕麦片', '主食', 100, 'g', 380, 13, 68, 7],
-  ['seed-banana', '香蕉', '水果', 1, '根', 105, 1.3, 27, 0.4],
-  ['seed-milk', '脱脂牛奶', '乳制品', 100, 'ml', 35, 3.4, 5, 0.2],
-  ['seed-yogurt', '无糖希腊酸奶', '乳制品', 100, 'g', 73, 9, 4, 2.2],
-  ['seed-broccoli', '西兰花', '蔬菜', 100, 'g', 34, 2.8, 6.6, 0.4],
-  ['seed-almonds', '杏仁', '坚果', 30, 'g', 174, 6.4, 6.5, 15],
-  ['seed-whey', '乳清蛋白粉', '补剂', 30, 'g', 120, 24, 3, 2],
-  ['seed-sweet-potato', '红薯', '主食', 100, 'g', 86, 1.6, 20.1, 0.1],
-];
-
-function seedBrowserFoods(): Food[] {
+function catalogFoods(): Food[] {
   const now = new Date().toISOString();
-  return seedDefinitions.map(([
-    id,
-    name,
-    category,
-    baseAmount,
-    baseUnit,
-    calories,
-    protein,
-    carbs,
-    fat,
-  ]) => ({
-    id,
-    name,
-    category,
-    baseAmount,
-    baseUnit,
-    calories,
-    protein,
-    carbs,
-    fat,
+  return FOOD_CATALOG.map((definition) => ({
+    id: definition.id,
+    name: definition.name,
+    category: definition.category,
+    baseAmount: definition.baseAmount,
+    baseUnit: definition.baseUnit,
+    calories: definition.calories,
+    protein: definition.protein,
+    carbs: definition.carbs,
+    fat: definition.fat,
     isFavorite: false,
     isCustom: false,
     usageCount: 0,
@@ -150,10 +105,31 @@ function seedBrowserFoods(): Food[] {
 
 function browserFoods(): Food[] {
   const saved = readBrowserData<Food[] | null>('foods', null);
-  if (saved !== null) return saved;
-  const seeded = seedBrowserFoods();
-  writeBrowserData('foods', seeded);
-  return seeded;
+  const canonical = catalogFoods();
+  if (saved === null) {
+    writeBrowserData('foods', canonical);
+    return canonical;
+  }
+
+  const definitions = new Map(canonical.map((food) => [food.id, food]));
+  const merged = saved.map((food) => {
+    const definition = definitions.get(food.id);
+    if (!definition || food.isCustom) return food;
+    definitions.delete(food.id);
+    return {
+      ...definition,
+      isFavorite: food.isFavorite,
+      usageCount: food.usageCount,
+      createdAt: food.createdAt,
+      updatedAt: food.updatedAt,
+    };
+  });
+  merged.push(...definitions.values());
+
+  if (merged.length !== saved.length || merged.some((food, index) => JSON.stringify(food) !== JSON.stringify(saved[index]))) {
+    writeBrowserData('foods', merged);
+  }
+  return merged;
 }
 
 function sortFoods(foods: Food[]): Food[] {
@@ -180,17 +156,35 @@ export const foodRepository = {
     if (!isTauriRuntime()) {
       if (!normalized) return this.getAll();
       const lower = normalized.toLocaleLowerCase('zh-CN');
-      return sortFoods(browserFoods().filter((food) => food.name.toLocaleLowerCase('zh-CN').includes(lower))).slice(0, 50);
+      const matchingIds = new Set(
+        FOOD_CATALOG
+          .filter((item) => [item.name, ...item.aliases].some((value) => value.toLocaleLowerCase('zh-CN').includes(lower)))
+          .map((item) => item.id),
+      );
+      return sortFoods(browserFoods().filter((food) =>
+        food.name.toLocaleLowerCase('zh-CN').includes(lower) || matchingIds.has(food.id))).slice(0, 50);
     }
 
+    const catalogMatches = FOOD_CATALOG
+      .filter((item) => [item.name, ...item.aliases].some((value) => value.includes(normalized)))
+      .map((item) => item.id);
     const db = await getDatabase();
-    const rows = await db.select<FoodRow[]>(
-      `SELECT * FROM foods
-       WHERE name LIKE ? ESCAPE '\\'
-       ORDER BY is_favorite DESC, usage_count DESC, name COLLATE NOCASE ASC
-       LIMIT 50`,
-      [`%${normalized.replace(/[\\%_]/g, '\\$&')}%`],
-    );
+    const escaped = `%${normalized.replace(/[\\%_]/g, '\\$&')}%`;
+    const rows = catalogMatches.length > 0
+      ? await db.select<FoodRow[]>(
+        `SELECT * FROM foods
+         WHERE name LIKE ? ESCAPE '\\' OR id IN (${catalogMatches.map(() => '?').join(',')})
+         ORDER BY is_favorite DESC, usage_count DESC, name COLLATE NOCASE ASC
+         LIMIT 50`,
+        [escaped, ...catalogMatches],
+      )
+      : await db.select<FoodRow[]>(
+        `SELECT * FROM foods
+         WHERE name LIKE ? ESCAPE '\\'
+         ORDER BY is_favorite DESC, usage_count DESC, name COLLATE NOCASE ASC
+         LIMIT 50`,
+        [escaped],
+      );
     return rows.map(mapFood);
   },
 
@@ -275,6 +269,22 @@ export const foodRepository = {
            updated_at = ?
        WHERE id = ?`,
       [new Date().toISOString(), id],
+    );
+  },
+
+  async incrementUsage(id: string): Promise<void> {
+    if (!id) return;
+    const now = new Date().toISOString();
+    if (!isTauriRuntime()) {
+      writeBrowserData('foods', browserFoods().map((food) =>
+        food.id === id ? { ...food, usageCount: food.usageCount + 1, updatedAt: now } : food));
+      return;
+    }
+
+    const db = await getDatabase();
+    await db.execute(
+      'UPDATE foods SET usage_count = usage_count + 1, updated_at = ? WHERE id = ?',
+      [now, id],
     );
   },
 
