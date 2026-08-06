@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { dayPlanRepository } from '../repositories/dayPlanRepository';
 import { goalRepository, type DayType } from '../repositories/goalRepository';
 import { mealRepository } from '../repositories/mealRepository';
 import type { DailyGoal, FoodEntry } from '../types';
@@ -16,7 +17,8 @@ interface State {
   loadGoal: () => Promise<void>;
   saveGoal: (dayType: DayType, goal: DailyGoal) => Promise<void>;
   addFood: (food: FoodEntry) => Promise<void>;
-  removeFood: (id: string) => Promise<void>;
+  updateFood: (id: string, food: FoodEntry) => Promise<void>;
+  removeFood: (id: string) => Promise<FoodEntry>;
   toggleTrainingDay: () => Promise<void>;
 }
 
@@ -33,7 +35,7 @@ function describeError(error: unknown, fallback: string): string {
       const serialized = JSON.stringify(error);
       if (serialized && serialized !== '{}') return `${fallback}：${serialized}`;
     } catch {
-      // Ignore non-serializable plugin errors and use the fallback below.
+      // Use fallback for non-serializable plugin errors.
     }
   }
 
@@ -63,6 +65,7 @@ function selectedDateTime(date: string): string {
 function toFoodEntry(entry: Awaited<ReturnType<typeof mealRepository.add>>): FoodEntry {
   return {
     id: entry.id,
+    foodId: entry.foodId,
     name: entry.foodName,
     meal: entry.mealType,
     amount: entry.amount,
@@ -96,19 +99,40 @@ export const useNutritionStore = create<State>()(
           return;
         }
 
-        set({ selectedDate: date, loading: true, error: null });
+        set({ loading: true, error: null });
         try {
           const entries = await mealRepository.getByDate(date);
-          set({ foods: entries.map(toFoodEntry), loading: false });
+          let plan = await dayPlanRepository.get(date);
+          if (!plan) {
+            const fallbackType: DayType = date === get().selectedDate && !get().trainingDay ? 'rest' : 'training';
+            const fallbackGoal = await goalRepository.get(fallbackType);
+            plan = await dayPlanRepository.save(date, fallbackType, fallbackGoal);
+          }
+          set({
+            selectedDate: date,
+            foods: entries.map(toFoodEntry),
+            trainingDay: plan.dayType === 'training',
+            goal: plan.goal,
+            loading: false,
+            error: null,
+          });
         } catch (error) {
           set({ loading: false, error: describeError(error, '读取饮食记录失败') });
         }
       },
 
       loadGoal: async () => {
-        const dayType: DayType = get().trainingDay ? 'training' : 'rest';
+        const date = get().selectedDate;
         try {
-          set({ goal: await goalRepository.get(dayType), error: null });
+          const existing = await dayPlanRepository.get(date);
+          if (existing) {
+            set({ goal: existing.goal, trainingDay: existing.dayType === 'training', error: null });
+            return;
+          }
+          const dayType: DayType = get().trainingDay ? 'training' : 'rest';
+          const goal = await goalRepository.get(dayType);
+          await dayPlanRepository.save(date, dayType, goal);
+          set({ goal, error: null });
         } catch (error) {
           set({ error: describeError(error, '读取营养目标失败') });
         }
@@ -117,7 +141,10 @@ export const useNutritionStore = create<State>()(
       saveGoal: async (dayType, goal) => {
         try {
           await goalRepository.save(dayType, goal);
-          if ((dayType === 'training') === get().trainingDay) set({ goal, error: null });
+          if ((dayType === 'training') === get().trainingDay) {
+            await dayPlanRepository.save(get().selectedDate, dayType, goal);
+            set({ goal, error: null });
+          }
         } catch (error) {
           set({ error: describeError(error, '保存营养目标失败') });
           throw error;
@@ -128,6 +155,7 @@ export const useNutritionStore = create<State>()(
         set({ error: null });
         try {
           const saved = await mealRepository.add({
+            foodId: food.foodId ?? null,
             foodName: food.name,
             mealType: food.meal,
             consumedAt: selectedDateTime(get().selectedDate),
@@ -145,11 +173,38 @@ export const useNutritionStore = create<State>()(
         }
       },
 
+      updateFood: async (id, food) => {
+        set({ error: null });
+        try {
+          const saved = await mealRepository.update(id, {
+            foodId: food.foodId ?? null,
+            foodName: food.name,
+            mealType: food.meal,
+            consumedAt: selectedDateTime(get().selectedDate),
+            amount: food.amount,
+            unit: food.unit,
+            calories: food.calories,
+            protein: food.protein,
+            carbs: food.carbs,
+            fat: food.fat,
+          });
+          set((state) => ({
+            foods: state.foods.map((entry) => entry.id === id ? toFoodEntry(saved) : entry),
+          }));
+        } catch (error) {
+          set({ error: describeError(error, '修改饮食记录失败') });
+          throw error;
+        }
+      },
+
       removeFood: async (id) => {
+        const removed = get().foods.find((food) => food.id === id);
+        if (!removed) throw new Error('找不到要删除的饮食记录');
         set({ error: null });
         try {
           await mealRepository.remove(id);
           set((state) => ({ foods: state.foods.filter((food) => food.id !== id) }));
+          return removed;
         } catch (error) {
           set({ error: describeError(error, '删除饮食记录失败') });
           throw error;
@@ -161,6 +216,7 @@ export const useNutritionStore = create<State>()(
         const dayType: DayType = trainingDay ? 'training' : 'rest';
         try {
           const goal = await goalRepository.get(dayType);
+          await dayPlanRepository.save(get().selectedDate, dayType, goal);
           set({ trainingDay, goal, error: null });
         } catch (error) {
           set({ error: describeError(error, '切换营养目标失败') });
@@ -169,7 +225,7 @@ export const useNutritionStore = create<State>()(
     }),
     {
       name: 'fuellog-nutrition',
-      partialize: ({ trainingDay, selectedDate }) => ({ trainingDay, selectedDate }),
+      partialize: ({ selectedDate }) => ({ selectedDate }),
     },
   ),
 );
