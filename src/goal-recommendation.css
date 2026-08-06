@@ -14,13 +14,27 @@
 .goal-profile-grid label {
   display: grid;
   gap: 7px;
-  color: var(--muted, #94a3b8);
+  color: #526158;
   font-size: 0.86rem;
+  font-weight: 650;
 }
 
 .goal-profile-grid input,
 .goal-profile-grid select {
   width: 100%;
+  min-height: 42px;
+  border: 1px solid #cbd5ce;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #18211b;
+  padding: 0 10px;
+}
+
+.goal-profile-grid input:focus,
+.goal-profile-grid select:focus {
+  border-color: #638315;
+  box-shadow: 0 0 0 3px rgba(99, 131, 21, 0.12);
+  outline: none;
 }
 
 .goal-recommendation-summary {
@@ -31,17 +45,21 @@
 
 .goal-recommendation-summary article {
   display: grid;
-  gap: 5px;
-  padding: 13px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid #d5ddd7;
   border-radius: 13px;
-  background: rgba(15, 23, 42, 0.42);
+  background: #f3f6f3;
 }
 
-.goal-recommendation-summary span,
-.goal-recommendation-macros span,
-.goal-disclaimer {
-  color: var(--muted, #94a3b8);
+.goal-recommendation-summary span {
+  color: #58665d;
+  font-weight: 650;
+}
+
+.goal-recommendation-summary strong {
+  color: #18211b;
+  font-size: 1.02rem;
 }
 
 .goal-recommendation-macros {
@@ -52,16 +70,37 @@
 
 .goal-recommendation-macros div {
   display: grid;
-  gap: 5px;
-  padding: 13px;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid #d8e8da;
   border-radius: 13px;
-  background: rgba(34, 197, 94, 0.08);
+  background: #edf7ee;
+}
+
+.goal-recommendation-macros strong {
+  color: #173f2c;
+}
+
+.goal-recommendation-macros span {
+  color: #526158;
 }
 
 .goal-disclaimer {
   margin: 0;
+  color: #657168;
   font-size: 0.84rem;
   line-height: 1.6;
+}
+
+.goal-recommendation .primary:disabled {
+  border-color: #6f8d7e !important;
+  background: #6f8d7e;
+  color: #ffffff;
+  opacity: 1;
+}
+
+.goal-recommendation .data-status {
+  margin: 0;
 }
 
 @media (max-width: 900px) {
