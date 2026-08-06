@@ -6,7 +6,9 @@ import { dayPlanRepository, type DailyPlan } from '../repositories/dayPlanReposi
 import { foodRepository, type Food } from '../repositories/foodRepository';
 import { goalRepository } from '../repositories/goalRepository';
 import type { MealEntry } from '../repositories/mealRepository';
+import { defaultGoalProfile, userProfileRepository } from '../repositories/userProfileRepository';
 import type { DailyGoal } from '../types';
+import type { GoalProfile } from '../utils/goalCalculator';
 
 export interface FuelLogBackup {
   format: 'fuellog-backup';
@@ -19,6 +21,7 @@ export interface FuelLogBackup {
     goals: { training: DailyGoal; rest: DailyGoal };
     bodyRecords: BodyRecord[];
     dailyPlans: DailyPlan[];
+    profile?: GoalProfile;
   };
 }
 
@@ -78,13 +81,14 @@ async function readMeals(): Promise<MealEntry[]> {
 }
 
 export async function createFuelLogBackup(): Promise<FuelLogBackup> {
-  const [foods, meals, training, rest, bodyRecords, dailyPlans] = await Promise.all([
+  const [foods, meals, training, rest, bodyRecords, dailyPlans, profile] = await Promise.all([
     foodRepository.getAll(),
     readMeals(),
     goalRepository.get('training'),
     goalRepository.get('rest'),
     bodyRecordRepository.getAll(),
     dayPlanRepository.getAll(),
+    userProfileRepository.get(),
   ]);
 
   return {
@@ -92,13 +96,14 @@ export async function createFuelLogBackup(): Promise<FuelLogBackup> {
     version: 1,
     appVersion: '0.3.0',
     exportedAt: new Date().toISOString(),
-    data: { foods, meals, goals: { training, rest }, bodyRecords, dailyPlans },
+    data: { foods, meals, goals: { training, rest }, bodyRecords, dailyPlans, profile },
   };
 }
 
 export async function restoreFuelLogBackup(input: unknown): Promise<void> {
   const backup = validateBackup(input);
   const { foods, meals, goals, bodyRecords, dailyPlans } = backup.data;
+  const profile = backup.data.profile ?? defaultGoalProfile;
 
   if (!isTauriRuntime()) {
     writeBrowserData('foods', foods);
@@ -106,6 +111,7 @@ export async function restoreFuelLogBackup(input: unknown): Promise<void> {
     writeBrowserData('goals', goals);
     writeBrowserData('body-records', bodyRecords);
     writeBrowserData('daily-plans', Object.fromEntries(dailyPlans.map((plan) => [plan.date, plan])));
+    writeBrowserData('goal-profile', profile);
     return;
   }
 
@@ -116,6 +122,7 @@ export async function restoreFuelLogBackup(input: unknown): Promise<void> {
     await db.execute('DELETE FROM daily_plans');
     await db.execute('DELETE FROM body_records');
     await db.execute('DELETE FROM nutrition_goals');
+    await db.execute('DELETE FROM user_profile');
     await db.execute('DELETE FROM foods');
 
     for (const food of foods) {
@@ -137,6 +144,12 @@ export async function restoreFuelLogBackup(input: unknown): Promise<void> {
         [crypto.randomUUID(), dayType, goal.calories, goal.protein, goal.carbs, goal.fat, now, now],
       );
     }
+
+    await db.execute(
+      `INSERT INTO user_profile(id,sex,age,height_cm,weight_kg,activity_level,objective,updated_at)
+       VALUES (1,?,?,?,?,?,?,?)`,
+      [profile.sex, profile.age, profile.heightCm, profile.weightKg, profile.activityLevel, profile.objective, now],
+    );
 
     for (const record of bodyRecords) {
       await db.execute(
