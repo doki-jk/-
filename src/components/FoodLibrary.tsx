@@ -133,7 +133,6 @@ export function FoodLibrary({ onRecordFood }: FoodLibraryProps) {
           onApply={(result) => {
             onRecordFood({
               ...result.food,
-              id: `${result.food.id}-recognized-${Date.now()}`,
               baseAmount: result.amount,
               baseUnit: result.unit,
               calories: result.nutrition.calories,
@@ -152,17 +151,9 @@ export function FoodLibrary({ onRecordFood }: FoodLibraryProps) {
           <div className="food-toolbar">
             <label>
               <Search size={17} />
-              <input
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder="搜索鸡胸肉、米饭、香蕉…"
-              />
+              <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索鸡胸肉、米饭、香蕉…" />
             </label>
-            <button
-              type="button"
-              className={favoritesOnly ? 'active' : ''}
-              onClick={() => setFavoritesOnly((value) => !value)}
-            >
+            <button type="button" className={favoritesOnly ? 'active' : ''} onClick={() => setFavoritesOnly((value) => !value)}>
               <Star size={16} />只看收藏
             </button>
           </div>
@@ -189,11 +180,7 @@ export function FoodLibrary({ onRecordFood }: FoodLibraryProps) {
                       </div>
                       <div className="food-library-controls">
                         {onRecordFood && (
-                          <button
-                            type="button"
-                            className="record-food"
-                            onClick={() => onRecordFood(food)}
-                          >
+                          <button type="button" className="record-food" onClick={() => onRecordFood(food)}>
                             <Plus size={15} />记录到饮食
                           </button>
                         )}
@@ -208,12 +195,7 @@ export function FoodLibrary({ onRecordFood }: FoodLibraryProps) {
                             <Star size={17} fill={food.isFavorite ? 'currentColor' : 'none'} />
                           </button>
                           {food.isCustom && (
-                            <button
-                              type="button"
-                              aria-label={`删除${food.name}`}
-                              title="删除自定义食物"
-                              onClick={() => void remove(food)}
-                            >
+                            <button type="button" aria-label={`删除${food.name}`} title="删除自定义食物" onClick={() => void remove(food)}>
                               <Trash2 size={17} />
                             </button>
                           )}
