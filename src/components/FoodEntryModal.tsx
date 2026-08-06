@@ -2,12 +2,14 @@ import { Calculator, LockKeyhole, UnlockKeyhole, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Food } from '../repositories/foodRepository';
 import type { FoodEntry, MealType } from '../types';
+import { localDateFromKey } from '../utils/date';
 import { isValidNutrition, scaleNutrition, type NutritionValues } from '../utils/nutrition';
 
 const meals: MealType[] = ['早餐', '午餐', '晚餐', '加餐'];
 
 interface FoodEntryModalProps {
   open: boolean;
+  selectedDate: string;
   recordLabel: string;
   selectedMeal: MealType;
   sourceFood: Food | null;
@@ -23,8 +25,13 @@ function emptyNutrition(): NutritionValues {
   return { calories: 0, protein: 0, carbs: 0, fat: 0 };
 }
 
+function currentTimeValue(date = new Date()): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
 export function FoodEntryModal({
   open,
+  selectedDate,
   recordLabel,
   selectedMeal,
   sourceFood,
@@ -36,6 +43,7 @@ export function FoodEntryModal({
   onSubmit,
 }: FoodEntryModalProps) {
   const [name, setName] = useState('');
+  const [time, setTime] = useState(currentTimeValue());
   const [amount, setAmount] = useState(100);
   const [unit, setUnit] = useState('g');
   const [nutrition, setNutrition] = useState<NutritionValues>(emptyNutrition());
@@ -53,7 +61,9 @@ export function FoodEntryModal({
         carbs: editingEntry.carbs,
         fat: editingEntry.fat,
       };
+      const consumedDate = editingEntry.consumedAt ? new Date(editingEntry.consumedAt) : new Date();
       setName(editingEntry.name);
+      setTime(Number.isNaN(consumedDate.getTime()) ? currentTimeValue() : currentTimeValue(consumedDate));
       setAmount(editingEntry.amount);
       setUnit(editingEntry.unit);
       setNutrition(initialNutrition);
@@ -61,6 +71,7 @@ export function FoodEntryModal({
       setAutoCalculate(true);
       return;
     }
+    setTime(currentTimeValue());
     if (sourceFood) {
       const initialNutrition = {
         calories: sourceFood.calories,
@@ -115,6 +126,17 @@ export function FoodEntryModal({
     if (next && amount > 0) setNutrition(scaleNutrition(base.nutrition, amount, base.amount));
   }
 
+  function consumedAtFromForm(): string {
+    const match = /^(\d{2}):(\d{2})$/.exec(time);
+    if (!match) throw new Error('请选择有效的记录时间。');
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour > 23 || minute > 59) throw new Error('请选择有效的记录时间。');
+    const value = localDateFromKey(selectedDate, hour);
+    value.setMinutes(minute, 0, 0);
+    return value.toISOString();
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanName = name.trim();
@@ -132,16 +154,22 @@ export function FoodEntryModal({
       return;
     }
 
-    setFormError('');
-    await onSubmit({
-      id: editingEntry?.id ?? globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`,
-      foodId: editingEntry?.foodId ?? sourceFood?.id ?? null,
-      name: cleanName,
-      meal: selectedMeal,
-      amount,
-      unit: cleanUnit,
-      ...nutrition,
-    });
+    try {
+      const consumedAt = consumedAtFromForm();
+      setFormError('');
+      await onSubmit({
+        id: editingEntry?.id ?? globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`,
+        foodId: editingEntry?.foodId ?? sourceFood?.id ?? null,
+        name: cleanName,
+        meal: selectedMeal,
+        consumedAt,
+        amount,
+        unit: cleanUnit,
+        ...nutrition,
+      });
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : '记录时间无效。');
+    }
   }
 
   if (!open) return null;
@@ -193,15 +221,12 @@ export function FoodEntryModal({
               </select>
             </label>
             <label>
+              时间
+              <input type="time" value={time} onChange={(event) => setTime(event.target.value)} required />
+            </label>
+            <label>
               数量
-              <input
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={amount}
-                onChange={(event) => updateAmount(Number(event.target.value))}
-                required
-              />
+              <input type="number" min="0.1" step="0.1" value={amount} onChange={(event) => updateAmount(Number(event.target.value))} required />
             </label>
             <label>
               单位
