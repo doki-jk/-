@@ -29,7 +29,8 @@ describe('goalRepository desktop persistence', () => {
     await goalRepository.saveBoth(training, rest);
 
     expect(mocks.execute.mock.calls[0]?.[0]).toBe('BEGIN IMMEDIATE');
-    expect(mocks.execute.mock.calls.at(-1)?.[0]).toBe('COMMIT');
+    const finalCall = mocks.execute.mock.calls[mocks.execute.mock.calls.length - 1];
+    expect(finalCall?.[0]).toBe('COMMIT');
 
     const inserts = mocks.execute.mock.calls.filter(([sql]) =>
       typeof sql === 'string' && sql.includes('INSERT INTO nutrition_goals'));
