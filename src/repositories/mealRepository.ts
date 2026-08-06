@@ -54,6 +54,10 @@ export interface CreateMealEntryInput {
   fat: number;
 }
 
+export interface AddMealOptions {
+  trackUsage?: boolean;
+}
+
 export interface DailyNutritionSummary {
   calories: number;
   protein: number;
@@ -130,9 +134,10 @@ export const mealRepository = {
     return rows.map(mapRow);
   },
 
-  async add(input: CreateMealEntryInput): Promise<MealEntry> {
+  async add(input: CreateMealEntryInput, options: AddMealOptions = {}): Promise<MealEntry> {
     validate(input);
     const now = new Date().toISOString();
+    const trackUsage = options.trackUsage !== false;
 
     if (!isTauriRuntime()) {
       const entry: MealEntry = {
@@ -151,7 +156,7 @@ export const mealRepository = {
         updatedAt: now,
       };
       writeBrowserData('meal-entries', [...browserEntries(), entry]);
-      if (entry.foodId) await foodRepository.incrementUsage(entry.foodId);
+      if (trackUsage && entry.foodId) await foodRepository.incrementUsage(entry.foodId);
       return entry;
     }
 
@@ -178,7 +183,7 @@ export const mealRepository = {
         now,
       ],
     );
-    if (input.foodId) await foodRepository.incrementUsage(input.foodId);
+    if (trackUsage && input.foodId) await foodRepository.incrementUsage(input.foodId);
     const rows = await db.select<MealEntryRow[]>('SELECT * FROM meal_entries WHERE id = ?', [id]);
     if (!rows[0]) throw new Error('饮食记录保存后未能读取');
     return mapRow(rows[0]);
