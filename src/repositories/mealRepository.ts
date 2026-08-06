@@ -6,6 +6,7 @@ import {
 } from '../database/browserStorage';
 import { getDatabase, isTauriRuntime } from '../database/client';
 import type { MealType } from '../types';
+import { assertDateKey, localDateFromKey } from '../utils/date';
 import { foodRepository } from './foodRepository';
 
 export interface MealEntry {
@@ -82,7 +83,7 @@ function validate(input: CreateMealEntryInput): void {
   if (!input.foodName.trim()) throw new Error('食物名称不能为空');
   if (!input.unit.trim()) throw new Error('单位不能为空');
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('数量必须大于 0');
-  if (Number.isNaN(Date.parse(input.consumedAt))) throw new Error('食用时间无效');
+  if (Number.isNaN(new Date(input.consumedAt).getTime())) throw new Error('食用时间无效');
   for (const [label, value] of [
     ['热量', input.calories],
     ['蛋白质', input.protein],
@@ -93,15 +94,8 @@ function validate(input: CreateMealEntryInput): void {
   }
 }
 
-function assertDateKey(date: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00`))) {
-    throw new Error('日期格式必须为 YYYY-MM-DD');
-  }
-}
-
 function dayRange(date: string): [string, string] {
-  assertDateKey(date);
-  const start = new Date(`${date}T00:00:00`);
+  const start = localDateFromKey(date, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
   return [start.toISOString(), end.toISOString()];
@@ -257,6 +251,7 @@ export const mealRepository = {
   },
 
   async getDailySummary(date: string): Promise<DailyNutritionSummary> {
+    assertDateKey(date);
     if (!isTauriRuntime()) {
       const entries = await this.getByDate(date);
       return entries.reduce<DailyNutritionSummary>((total, entry) => ({
@@ -281,9 +276,10 @@ export const mealRepository = {
   },
 
   async copyDay(sourceDate: string, targetDate: string): Promise<number> {
+    assertDateKey(sourceDate);
+    assertDateKey(targetDate, '目标日期格式必须为 YYYY-MM-DD');
     const entries = await this.getByDate(sourceDate);
-    const target = new Date(`${targetDate}T12:00:00`);
-    if (Number.isNaN(target.getTime())) throw new Error('目标日期格式必须为 YYYY-MM-DD');
+    const target = localDateFromKey(targetDate);
     let copied = 0;
     for (const entry of entries) {
       await this.add({
