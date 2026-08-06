@@ -29,7 +29,7 @@ function GoalForm({ dayType, title }: { dayType: DayType; title: string }) {
         const goal = await goalRepository.get(dayType);
         if (active) setValue(goal);
       } catch (error) {
-        if (active) setMessage(error instanceof Error ? error.message : '读取目标失败');
+        if (active) setMessage(error instanceof Error ? error.message : `读取目标失败：${String(error)}`);
       } finally {
         if (active) setLoading(false);
       }
@@ -46,7 +46,7 @@ function GoalForm({ dayType, title }: { dayType: DayType; title: string }) {
       await saveGoal(dayType, value);
       setMessage('目标已保存到当前设备');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '保存失败');
+      setMessage(error instanceof Error ? error.message : `保存失败：${String(error)}`);
     } finally {
       setSaving(false);
     }
@@ -86,6 +86,8 @@ function GoalForm({ dayType, title }: { dayType: DayType; title: string }) {
 }
 
 export function GoalSettings() {
+  const [revision, setRevision] = useState(0);
+
   return (
     <section className="goal-settings">
       <div className="settings-heading">
@@ -93,10 +95,10 @@ export function GoalSettings() {
         <h1>训练日和休息日目标</h1>
         <p>先用个人资料生成起点建议，再根据体重趋势、训练表现和实际感受手动调整。</p>
       </div>
-      <GoalRecommendation />
+      <GoalRecommendation onApplied={() => setRevision((current) => current + 1)} />
       <div className="goal-grid">
-        <GoalForm dayType="training" title="训练日目标" />
-        <GoalForm dayType="rest" title="休息日目标" />
+        <GoalForm key={`training-${revision}`} dayType="training" title="训练日目标" />
+        <GoalForm key={`rest-${revision}`} dayType="rest" title="休息日目标" />
       </div>
     </section>
   );
