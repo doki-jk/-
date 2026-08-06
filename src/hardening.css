@@ -1,3 +1,20 @@
+.profile {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile:hover,
+.profile:focus-visible {
+  background: rgba(255, 255, 255, 0.04);
+  outline: none;
+}
+
 .nutrition-calculation-bar {
   display: flex;
   align-items: center;
