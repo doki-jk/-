@@ -21,34 +21,50 @@ const rest = { calories: 3027, protein: 160, carbs: 453, fat: 64 };
 
 describe('goalRepository desktop persistence', () => {
   beforeEach(() => {
-    mocks.execute.mockReset().mockResolvedValue({ rowsAffected: 1 });
+    mocks.execute.mockReset().mockResolvedValue({ rowsAffected: 2 });
     mocks.select.mockReset();
   });
 
-  it('saves training and rest goals in one transaction', async () => {
+  it('saves training and rest goals in one SQL-plugin invocation', async () => {
     await goalRepository.saveBoth(training, rest);
 
-    expect(mocks.execute.mock.calls[0]?.[0]).toBe('BEGIN IMMEDIATE');
-    const finalCall = mocks.execute.mock.calls[mocks.execute.mock.calls.length - 1];
-    expect(finalCall?.[0]).toBe('COMMIT');
-
-    const inserts = mocks.execute.mock.calls.filter(([sql]) =>
-      typeof sql === 'string' && sql.includes('INSERT INTO nutrition_goals'));
-    expect(inserts).toHaveLength(2);
-    expect(inserts[0]?.[1]).toEqual(expect.arrayContaining(['training', 3227, 160, 503, 64]));
-    expect(inserts[1]?.[1]).toEqual(expect.arrayContaining(['rest', 3027, 160, 453, 64]));
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
+    const [sql, values] = mocks.execute.mock.calls[0] ?? [];
+    expect(sql).toContain('INSERT INTO nutrition_goals');
+    expect(sql).toContain('ON CONFLICT(id) DO UPDATE');
+    expect(sql).not.toContain('BEGIN');
+    expect(sql).not.toContain('COMMIT');
+    expect(values).toEqual(expect.arrayContaining([
+      'goal-current-training',
+      'training',
+      3227,
+      160,
+      503,
+      64,
+      'goal-current-rest',
+      'rest',
+      3027,
+      453,
+    ]));
   });
 
-  it('rolls back and exposes a readable SQLite error', async () => {
-    mocks.execute
-      .mockResolvedValueOnce({ rowsAffected: 0 })
-      .mockResolvedValueOnce({ rowsAffected: 1 })
-      .mockRejectedValueOnce({ message: 'no such column: effective_to' })
-      .mockResolvedValueOnce({ rowsAffected: 0 });
+  it('prefers the deterministic current row when reading goals', async () => {
+    mocks.select.mockResolvedValueOnce([training]);
+
+    await expect(goalRepository.get('training')).resolves.toEqual(training);
+
+    expect(mocks.select).toHaveBeenCalledWith(
+      expect.stringContaining('CASE WHEN id = ? THEN 0 ELSE 1 END'),
+      ['training', 'goal-current-training'],
+    );
+  });
+
+  it('exposes a readable SQLite error without leaving a transaction open', async () => {
+    mocks.execute.mockRejectedValueOnce({ message: 'database is locked' });
 
     await expect(goalRepository.saveBoth(training, rest))
-      .rejects.toThrow('SQLite 保存营养目标失败：no such column: effective_to');
+      .rejects.toThrow('SQLite 保存营养目标失败：database is locked');
 
-    expect(mocks.execute).toHaveBeenCalledWith('ROLLBACK');
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
   });
 });
