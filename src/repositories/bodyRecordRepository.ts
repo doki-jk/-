@@ -1,5 +1,6 @@
 import { createLocalId, readBrowserData, writeBrowserData } from '../database/browserStorage';
 import { getDatabase, isTauriRuntime } from '../database/client';
+import { assertDateKey } from '../utils/date';
 
 export interface BodyRecord {
   id: string;
@@ -22,14 +23,8 @@ export interface BodyRecordInput {
   note?: string | null;
 }
 
-function assertDate(value: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00`))) {
-    throw new Error('记录日期格式必须为 YYYY-MM-DD');
-  }
-}
-
 function validate(input: BodyRecordInput): void {
-  assertDate(input.recordedDate);
+  assertDateKey(input.recordedDate, '记录日期格式必须为 YYYY-MM-DD');
   if (!Number.isFinite(input.weight) || input.weight <= 0) throw new Error('体重必须大于 0');
   if (input.bodyFat != null && (!Number.isFinite(input.bodyFat) || input.bodyFat < 0 || input.bodyFat > 100)) {
     throw new Error('体脂率必须在 0 到 100 之间');
@@ -134,11 +129,14 @@ export const bodyRecordRepository = {
 
   async remove(id: string): Promise<void> {
     if (!isTauriRuntime()) {
-      writeBrowserData('body-records', browserRecords().filter((record) => record.id !== id));
+      const records = browserRecords();
+      if (!records.some((record) => record.id === id)) throw new Error('找不到要删除的身体数据');
+      writeBrowserData('body-records', records.filter((record) => record.id !== id));
       return;
     }
 
     const db = await getDatabase();
-    await db.execute('DELETE FROM body_records WHERE id = ?', [id]);
+    const result = await db.execute('DELETE FROM body_records WHERE id = ?', [id]);
+    if (result.rowsAffected === 0) throw new Error('找不到要删除的身体数据');
   },
 };
