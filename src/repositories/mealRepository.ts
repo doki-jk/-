@@ -115,6 +115,32 @@ function sortEntries(entries: MealEntry[]): MealEntry[] {
       || left.createdAt.localeCompare(right.createdAt));
 }
 
+async function trackUsageSafely(foodId: string | null): Promise<void> {
+  if (!foodId) return;
+  try {
+    await foodRepository.incrementUsage(foodId);
+  } catch (error) {
+    console.warn('饮食记录已保存，但常用食物次数更新失败', error);
+  }
+}
+
+async function resolveDesktopFoodId(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  foodId: string | null | undefined,
+): Promise<string | null> {
+  if (!foodId) return null;
+  try {
+    const rows = await db.select<Array<{ id: string }>>(
+      'SELECT id FROM foods WHERE id = ? LIMIT 1',
+      [foodId],
+    );
+    return rows[0]?.id ?? null;
+  } catch (error) {
+    console.warn('校验食物引用失败，记录将按手工食物保存', error);
+    return null;
+  }
+}
+
 export const mealRepository = {
   async getByDate(date: string): Promise<MealEntry[]> {
     assertDateKey(date);
@@ -156,36 +182,43 @@ export const mealRepository = {
         updatedAt: now,
       };
       writeBrowserData('meal-entries', [...browserEntries(), entry]);
-      if (trackUsage && entry.foodId) await foodRepository.incrementUsage(entry.foodId);
+      if (trackUsage) await trackUsageSafely(entry.foodId);
       return entry;
     }
 
     const db = await getDatabase();
-    const id = crypto.randomUUID();
-    await db.execute(
-      `INSERT INTO meal_entries(
-        id,food_id,food_name,meal_type,consumed_at,amount,unit,
-        calories,protein,carbs,fat,created_at,updated_at
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [
-        id,
-        input.foodId ?? null,
-        input.foodName.trim(),
-        input.mealType,
-        input.consumedAt,
-        input.amount,
-        input.unit.trim(),
-        input.calories,
-        input.protein,
-        input.carbs,
-        input.fat,
-        now,
-        now,
-      ],
-    );
-    if (trackUsage && input.foodId) await foodRepository.incrementUsage(input.foodId);
+    const id = createLocalId('meal');
+    const resolvedFoodId = await resolveDesktopFoodId(db, input.foodId);
+    try {
+      await db.execute(
+        `INSERT INTO meal_entries(
+          id,food_id,food_name,meal_type,consumed_at,amount,unit,
+          calories,protein,carbs,fat,created_at,updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          id,
+          resolvedFoodId,
+          input.foodName.trim(),
+          input.mealType,
+          input.consumedAt,
+          input.amount,
+          input.unit.trim(),
+          input.calories,
+          input.protein,
+          input.carbs,
+          input.fat,
+          now,
+          now,
+        ],
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`SQLite 写入饮食记录失败：${detail}`);
+    }
+
     const rows = await db.select<MealEntryRow[]>('SELECT * FROM meal_entries WHERE id = ?', [id]);
-    if (!rows[0]) throw new Error('饮食记录保存后未能读取');
+    if (!rows[0]) throw new Error('饮食记录已写入，但保存后未能重新读取');
+    if (trackUsage) await trackUsageSafely(resolvedFoodId);
     return mapRow(rows[0]);
   },
 
@@ -216,13 +249,14 @@ export const mealRepository = {
     }
 
     const db = await getDatabase();
+    const resolvedFoodId = await resolveDesktopFoodId(db, input.foodId);
     const result = await db.execute(
       `UPDATE meal_entries SET
         food_id = ?, food_name = ?, meal_type = ?, consumed_at = ?, amount = ?, unit = ?,
         calories = ?, protein = ?, carbs = ?, fat = ?, updated_at = ?
        WHERE id = ?`,
       [
-        input.foodId ?? null,
+        resolvedFoodId,
         input.foodName.trim(),
         input.mealType,
         input.consumedAt,
