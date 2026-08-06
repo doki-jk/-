@@ -28,6 +28,17 @@ export interface FoodRecognitionResponse {
   error: string | null;
 }
 
+export interface FoodRecognitionBatchItem {
+  text: string;
+  response: FoodRecognitionResponse;
+}
+
+export interface FoodRecognitionBatchResponse {
+  items: FoodRecognitionBatchItem[];
+  isBatch: boolean;
+  error: string | null;
+}
+
 type ParsedQuantity = {
   amount: number | null;
   unit: string | null;
@@ -217,16 +228,62 @@ function catalogFallbackFoods(savedFoods: Food[]): Food[] {
     }));
 }
 
-export async function recognizeFoodText(input: string): Promise<FoodRecognitionResponse> {
-  const originalText = input.trim();
-  if (originalText.length < 2) return { result: null, suggestions: [], error: '请输入食物名称，例如“200g鸡胸肉”。' };
+async function availableFoods(): Promise<Food[]> {
+  const savedFoods = await foodRepository.getAll();
+  return [...savedFoods, ...catalogFallbackFoods(savedFoods)];
+}
+
+function buildResult(
+  originalText: string,
+  food: Food,
+  matchedText: string,
+  parsed: ParsedQuantity,
+  matchConfidence: number,
+  selectedByUser = false,
+): FoodRecognitionResult {
+  const amount = parsed.amount ?? food.baseAmount;
+  const unit = parsed.unit ?? food.baseUnit;
+  const converted = convertToBaseAmount(food, amount, unit);
+  const multiplier = converted.equivalent / food.baseAmount;
+  const nutrition = {
+    calories: round(food.calories * multiplier),
+    protein: round(food.protein * multiplier),
+    carbs: round(food.carbs * multiplier),
+    fat: round(food.fat * multiplier),
+  };
+  const confidence = Math.max(
+    0.35,
+    Math.min(0.99, matchConfidence - (parsed.explicit ? 0 : 0.08) - converted.penalty),
+  );
+  const quantityNote = parsed.explicit
+    ? converted.note
+    : `未写份量，按默认 ${food.baseAmount}${food.baseUnit} 估算`;
+  const identityNote = selectedByUser ? '食物由你从候选中确认' : `名称匹配为“${matchedText}”`;
+
+  return {
+    food,
+    originalText,
+    matchedText,
+    amount,
+    unit,
+    equivalentBaseAmount: round(converted.equivalent),
+    multiplier,
+    nutrition,
+    confidence: round(confidence * 100),
+    confidenceLabel: confidenceLabel(confidence),
+    note: `${identityNote}；${quantityNote}。营养值为通用估算，品牌和烹饪方式会造成差异。`,
+  };
+}
+
+function recognizeAgainstFoods(originalText: string, foods: Food[]): FoodRecognitionResponse {
+  if (originalText.length < 2) {
+    return { result: null, suggestions: [], error: '请输入食物名称，例如“200g鸡胸肉”。' };
+  }
 
   const parsed = parseQuantity(originalText);
   const foodQuery = normalizeFoodText(stripStopWords(parsed.remainingText));
   if (!foodQuery) return { result: null, suggestions: [], error: '没有识别到食物名称，请补充名称和份量。' };
 
-  const savedFoods = await foodRepository.getAll();
-  const foods = [...savedFoods, ...catalogFallbackFoods(savedFoods)];
   const ranked = foods
     .map((food) => ({ food, ...scoreFood(food, foodQuery) }))
     .filter((item) => item.score >= 0.28)
@@ -236,37 +293,51 @@ export async function recognizeFoodText(input: string): Promise<FoodRecognitionR
   const suggestions = ranked.map(({ food, score }) => ({ food, score: round(score * 100) }));
   const best = ranked[0];
   if (!best || best.score < 0.48) {
-    return { result: null, suggestions, error: '暂时无法可靠匹配该食物。可换一个常用名称，或先添加自定义食物。' };
+    return { result: null, suggestions, error: '暂时无法可靠匹配该食物。请选择候选，或先添加自定义食物。' };
   }
 
-  const amount = parsed.amount ?? best.food.baseAmount;
-  const unit = parsed.unit ?? best.food.baseUnit;
-  const converted = convertToBaseAmount(best.food, amount, unit);
-  const multiplier = converted.equivalent / best.food.baseAmount;
-  const nutrition = {
-    calories: round(best.food.calories * multiplier),
-    protein: round(best.food.protein * multiplier),
-    carbs: round(best.food.carbs * multiplier),
-    fat: round(best.food.fat * multiplier),
-  };
-  const confidence = Math.max(0.35, Math.min(0.99, best.score - (parsed.explicit ? 0 : 0.08) - converted.penalty));
-  const quantityNote = parsed.explicit ? converted.note : `未写份量，按默认 ${best.food.baseAmount}${best.food.baseUnit} 估算`;
-
   return {
-    result: {
-      food: best.food,
-      originalText,
-      matchedText: best.matchedText,
-      amount,
-      unit,
-      equivalentBaseAmount: round(converted.equivalent),
-      multiplier,
-      nutrition,
-      confidence: round(confidence * 100),
-      confidenceLabel: confidenceLabel(confidence),
-      note: `${quantityNote}。营养值为通用估算，品牌和烹饪方式会造成差异。`,
-    },
+    result: buildResult(originalText, best.food, best.matchedText, parsed, best.score),
     suggestions,
     error: null,
   };
+}
+
+export function splitFoodDescriptions(input: string): string[] {
+  const segments = input
+    .replace(/(?:以及|还有|加上)/g, '、')
+    .split(/[、，,；;+＋]|(?:和)/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return [...new Set(segments)].slice(0, 8);
+}
+
+export async function recognizeFoodText(input: string): Promise<FoodRecognitionResponse> {
+  const originalText = input.trim();
+  return recognizeAgainstFoods(originalText, await availableFoods());
+}
+
+export async function recognizeFoodBatchText(input: string): Promise<FoodRecognitionBatchResponse> {
+  const originalText = input.trim();
+  if (!originalText) return { items: [], isBatch: false, error: '请输入食物和份量。' };
+  const segments = splitFoodDescriptions(originalText);
+  const foods = await availableFoods();
+  const items = (segments.length > 0 ? segments : [originalText]).map((text) => ({
+    text,
+    response: recognizeAgainstFoods(text, foods),
+  }));
+  return {
+    items,
+    isBatch: items.length > 1,
+    error: items.every((item) => item.response.result == null)
+      ? '没有识别出可直接使用的食物，请从候选中确认或使用手动录入。'
+      : null,
+  };
+}
+
+export async function confirmFoodSuggestion(input: string, food: Food): Promise<FoodRecognitionResult> {
+  const originalText = input.trim();
+  if (!originalText) throw new Error('食物描述不能为空');
+  const parsed = parseQuantity(originalText);
+  return buildResult(originalText, food, food.name, parsed, 0.97, true);
 }
