@@ -13,10 +13,8 @@ async function bootstrap(): Promise<void> {
       await seedDatabase();
     }
 
-    await Promise.all([
-      useNutritionStore.getState().loadToday(),
-      useNutritionStore.getState().loadGoal(),
-    ]);
+    const state = useNutritionStore.getState();
+    await state.loadDate(state.selectedDate);
   } catch (error) {
     console.error('FuelLog 初始化失败', error);
   }
