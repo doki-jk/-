@@ -403,7 +403,8 @@ export async function restoreFuelLogBackup(input: unknown): Promise<void> {
 }
 
 function csvCell(value: unknown): string {
-  const text = String(value ?? '');
+  let text = String(value ?? '');
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
 

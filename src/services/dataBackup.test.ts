@@ -84,4 +84,15 @@ describe('FuelLog backups', () => {
     expect(csv).toContain('"鸡胸肉"');
     expect(csv).toContain('"330"');
   });
+
+  it('neutralizes spreadsheet formulas in user-controlled CSV cells', () => {
+    const backup = validBackup();
+    backup.data.meals[0].foodName = '=HYPERLINK("https://example.invalid","click")';
+    backup.data.meals[0].unit = '@SUM(1,1)';
+    const csv = createMealsCsv(backup);
+    expect(csv).toContain('"\'=HYPERLINK(""https://example.invalid"",""click"")"');
+    expect(csv).toContain('"\'@SUM(1,1)"');
+    expect(csv).not.toContain('"=HYPERLINK');
+    expect(csv).not.toContain('"@SUM');
+  });
 });
