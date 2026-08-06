@@ -220,6 +220,16 @@ async function repairLegacySchema(db: Database): Promise<void> {
     [now, now],
   );
   await db.execute(
+    `UPDATE nutrition_goals
+     SET id = 'legacy-goal-' || lower(hex(randomblob(16)))
+     WHERE id IS NULL OR id = '' OR rowid NOT IN (
+       SELECT MIN(rowid)
+       FROM nutrition_goals
+       WHERE id IS NOT NULL AND id <> ''
+       GROUP BY id
+     )`,
+  );
+  await db.execute(
     `UPDATE daily_plans
      SET updated_at = CASE WHEN updated_at IS NULL OR updated_at = '' THEN ? ELSE updated_at END`,
     [now],
@@ -229,6 +239,7 @@ async function repairLegacySchema(db: Database): Promise<void> {
   await db.execute('CREATE INDEX IF NOT EXISTS idx_foods_usage ON foods(is_favorite DESC, usage_count DESC)');
   await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_entries_date ON meal_entries(consumed_at)');
   await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_entries_type ON meal_entries(meal_type)');
+  await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_goals_id_unique ON nutrition_goals(id)');
   await db.execute('CREATE INDEX IF NOT EXISTS idx_nutrition_goals_active ON nutrition_goals(day_type, effective_to, effective_from)');
   await db.execute('CREATE INDEX IF NOT EXISTS idx_daily_plans_type ON daily_plans(day_type)');
 }
