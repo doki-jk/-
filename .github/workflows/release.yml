@@ -67,15 +67,17 @@ jobs:
       - name: Build locked Windows installers
         run: npx tauri build --bundles nsis,msi -- --locked
 
-      - name: Sign installers when certificate secrets are configured
+      - name: Sign and verify release installers
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) {
-            Write-Host "No Windows signing certificate configured. Installers remain unsigned."
-            exit 0
+            throw "A Windows code-signing certificate is required for public releases"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
+            throw "The Windows code-signing certificate password is required for public releases"
           }
           $certificatePath = Join-Path $env:RUNNER_TEMP "fuellog-signing.pfx"
           try {
