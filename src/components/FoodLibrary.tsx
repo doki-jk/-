@@ -6,6 +6,7 @@ import {
   type Food,
   type FoodCategory,
 } from '../repositories/foodRepository';
+import { SmartFoodRecognition } from './SmartFoodRecognition';
 import '../food-library.css';
 
 const categories: FoodCategory[] = [
@@ -116,9 +117,9 @@ export function FoodLibrary({ onRecordFood }: FoodLibraryProps) {
   return (
     <section className="food-library-page">
       <div className="settings-heading">
-        <p className="eyebrow">常用营养数据</p>
+        <p className="eyebrow">智能营养数据库</p>
         <h1>食物库</h1>
-        <p>搜索预置食物，收藏常用项目，或录入自己的食物营养数据。</p>
+        <p>用自然语言识别食物和份量，也可以搜索、收藏或录入自己的营养数据。</p>
       </div>
 
       <div className="food-library-summary">
@@ -126,6 +127,23 @@ export function FoodLibrary({ onRecordFood }: FoodLibraryProps) {
         <article><span>当前结果中的收藏</span><strong>{summary.favorites}</strong></article>
         <article><span>当前结果中的自定义</span><strong>{summary.custom}</strong></article>
       </div>
+
+      {onRecordFood && (
+        <SmartFoodRecognition
+          onApply={(result) => {
+            onRecordFood({
+              ...result.food,
+              id: `${result.food.id}-recognized-${Date.now()}`,
+              baseAmount: result.amount,
+              baseUnit: result.unit,
+              calories: result.nutrition.calories,
+              protein: result.nutrition.protein,
+              carbs: result.nutrition.carbs,
+              fat: result.nutrition.fat,
+            });
+          }}
+        />
+      )}
 
       {message && <p className="data-status" role="status">{message}</p>}
 
