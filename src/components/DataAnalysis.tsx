@@ -75,15 +75,15 @@ export function DataAnalysis() {
       <div className="settings-heading">
         <p className="eyebrow">趋势与复盘</p>
         <h1>数据分析</h1>
-        <p>根据当前设备中保存的饮食与身体记录，查看最近趋势和记录完整度。</p>
+        <p>根据当前设备中保存的饮食与身体记录，查看最近趋势和记录完整度。日均值仅按实际有记录的天数计算。</p>
       </div>
 
       {message && <p className="data-status" role="status">{message}</p>}
       {loading ? <p className="data-status">正在整理分析数据…</p> : (
         <>
           <div className="analysis-summary-grid">
-            <article className="analysis-summary-card"><Flame size={20} /><span>7 天日均热量</span><strong>{numberFormat.format(summary.averageCalories)} kcal</strong></article>
-            <article className="analysis-summary-card"><Utensils size={20} /><span>7 天日均蛋白质</span><strong>{numberFormat.format(summary.averageProtein)} g</strong></article>
+            <article className="analysis-summary-card"><Flame size={20} /><span>有记录日均热量</span><strong>{numberFormat.format(summary.averageCalories)} kcal</strong></article>
+            <article className="analysis-summary-card"><Utensils size={20} /><span>有记录日均蛋白质</span><strong>{numberFormat.format(summary.averageProtein)} g</strong></article>
             <article className="analysis-summary-card"><Activity size={20} /><span>有记录天数</span><strong>{summary.recordedDays} / 7 天</strong></article>
             <article className="analysis-summary-card"><Scale size={20} /><span>最新体重</span><strong>{summary.latestWeight == null ? '--' : `${numberFormat.format(summary.latestWeight)} kg`}</strong><small>{summary.weightChange == null ? '至少记录两次后显示变化' : `较首条 ${summary.weightChange > 0 ? '+' : ''}${numberFormat.format(summary.weightChange)} kg`}</small></article>
           </div>
