@@ -60,7 +60,7 @@ jobs:
         run: npx tauri icon src-tauri/icons/icon.svg
 
       - name: Build locked Windows installers
-        run: npx tauri build --bundles nsis,msi --locked
+        run: npx tauri build --bundles nsis,msi -- --locked
 
       - name: Sign installers when certificate secrets are configured
         shell: pwsh
