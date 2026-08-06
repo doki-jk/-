@@ -5,6 +5,7 @@ export interface FoodEntry {
   foodId?: string | null;
   name: string;
   meal: MealType;
+  consumedAt?: string;
   amount: number;
   unit: string;
   calories: number;
