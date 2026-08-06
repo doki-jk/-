@@ -1,6 +1,5 @@
 import type Database from '@tauri-apps/plugin-sql';
 import {
-  createLocalId,
   readBrowserData,
   writeBrowserData,
 } from '../database/browserStorage';
@@ -19,6 +18,11 @@ interface GoalRow {
 const defaults: Record<DayType, DailyGoal> = {
   training: { calories: 2300, protein: 170, carbs: 260, fat: 70 },
   rest: { calories: 2050, protein: 170, carbs: 205, fat: 70 },
+};
+
+const currentGoalIds: Record<DayType, string> = {
+  training: 'goal-current-training',
+  rest: 'goal-current-rest',
 };
 
 function validate(goal: DailyGoal): void {
@@ -60,39 +64,46 @@ async function saveDesktopGoals(
   updates: Array<[DayType, DailyGoal]>,
 ): Promise<void> {
   const now = new Date().toISOString();
-  await db.execute('BEGIN IMMEDIATE');
+  const placeholders = updates
+    .map(() => "(?, 'daily_macro', ?, ?, ?, ?, ?, ?, NULL, ?)")
+    .join(', ');
+  const values: Array<string | number> = [];
+
+  for (const [dayType, goal] of updates) {
+    values.push(
+      currentGoalIds[dayType],
+      dayType,
+      goal.calories,
+      goal.protein,
+      goal.carbs,
+      goal.fat,
+      now,
+      now,
+    );
+  }
+
   try {
-    for (const [dayType, goal] of updates) {
-      await db.execute(
-        `UPDATE nutrition_goals
-         SET effective_to = ?
-         WHERE day_type = ? AND effective_to IS NULL`,
-        [now, dayType],
-      );
-      await db.execute(
-        `INSERT INTO nutrition_goals(
-          id, goal_type, day_type, calories, protein, carbs, fat,
-          effective_from, effective_to, created_at
-        ) VALUES (?, 'daily_macro', ?, ?, ?, ?, ?, ?, NULL, ?)`,
-        [
-          createLocalId('goal'),
-          dayType,
-          goal.calories,
-          goal.protein,
-          goal.carbs,
-          goal.fat,
-          now,
-          now,
-        ],
-      );
-    }
-    await db.execute('COMMIT');
+    // Keep this as one SQL-plugin invocation. The plugin executes each call through
+    // a connection pool, so BEGIN/COMMIT issued as separate calls can land on
+    // different connections and leave the UI waiting on a SQLite write lock.
+    await db.execute(
+      `INSERT INTO nutrition_goals(
+        id, goal_type, day_type, calories, protein, carbs, fat,
+        effective_from, effective_to, created_at
+      ) VALUES ${placeholders}
+      ON CONFLICT(id) DO UPDATE SET
+        goal_type = excluded.goal_type,
+        day_type = excluded.day_type,
+        calories = excluded.calories,
+        protein = excluded.protein,
+        carbs = excluded.carbs,
+        fat = excluded.fat,
+        effective_from = excluded.effective_from,
+        effective_to = NULL,
+        created_at = excluded.created_at`,
+      values,
+    );
   } catch (error) {
-    try {
-      await db.execute('ROLLBACK');
-    } catch (rollbackError) {
-      console.error('回滚营养目标事务失败', rollbackError);
-    }
     throw new Error(`SQLite 保存营养目标失败：${databaseErrorMessage(error)}`);
   }
 }
@@ -108,9 +119,11 @@ export const goalRepository = {
       `SELECT calories, protein, carbs, fat
        FROM nutrition_goals
        WHERE day_type = ? AND effective_to IS NULL
-       ORDER BY effective_from DESC, created_at DESC
+       ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END,
+                effective_from DESC,
+                created_at DESC
        LIMIT 1`,
-      [dayType],
+      [dayType, currentGoalIds[dayType]],
     );
     return rows[0] ?? defaults[dayType];
   },

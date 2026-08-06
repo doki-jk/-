@@ -119,24 +119,18 @@ const migrations: Migration[] = [
 ];
 
 async function applyMigration(db: Database, migration: Migration): Promise<void> {
-  await db.execute('BEGIN IMMEDIATE');
-  try {
-    for (const statement of migration.statements) {
-      await db.execute(statement);
-    }
-    await db.execute(
-      'INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)',
-      [migration.version, migration.name, new Date().toISOString()]
-    );
-    await db.execute('COMMIT');
-  } catch (error) {
-    try {
-      await db.execute('ROLLBACK');
-    } catch (rollbackError) {
-      console.error('数据库迁移回滚失败', rollbackError);
-    }
-    throw error;
+  // Do not emulate a transaction with separate BEGIN/COMMIT plugin calls.
+  // Tauri SQL executes each call through a pool, so those calls are not
+  // guaranteed to use the same connection and can leave SQLite locked.
+  // These DDL statements are idempotent; the version marker is written only
+  // after every statement succeeds, so an interrupted migration is retried.
+  for (const statement of migration.statements) {
+    await db.execute(statement);
   }
+  await db.execute(
+    'INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)',
+    [migration.version, migration.name, new Date().toISOString()]
+  );
 }
 
 async function ensureColumn(
@@ -226,6 +220,16 @@ async function repairLegacySchema(db: Database): Promise<void> {
     [now, now],
   );
   await db.execute(
+    `UPDATE nutrition_goals
+     SET id = 'legacy-goal-' || lower(hex(randomblob(16)))
+     WHERE id IS NULL OR id = '' OR rowid NOT IN (
+       SELECT MIN(rowid)
+       FROM nutrition_goals
+       WHERE id IS NOT NULL AND id <> ''
+       GROUP BY id
+     )`,
+  );
+  await db.execute(
     `UPDATE daily_plans
      SET updated_at = CASE WHEN updated_at IS NULL OR updated_at = '' THEN ? ELSE updated_at END`,
     [now],
@@ -235,6 +239,7 @@ async function repairLegacySchema(db: Database): Promise<void> {
   await db.execute('CREATE INDEX IF NOT EXISTS idx_foods_usage ON foods(is_favorite DESC, usage_count DESC)');
   await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_entries_date ON meal_entries(consumed_at)');
   await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_entries_type ON meal_entries(meal_type)');
+  await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_goals_id_unique ON nutrition_goals(id)');
   await db.execute('CREATE INDEX IF NOT EXISTS idx_nutrition_goals_active ON nutrition_goals(day_type, effective_to, effective_from)');
   await db.execute('CREATE INDEX IF NOT EXISTS idx_daily_plans_type ON daily_plans(day_type)');
 }
