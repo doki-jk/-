@@ -3,6 +3,7 @@ import { Dumbbell, Moon, Save } from 'lucide-react';
 import { goalRepository, type DayType } from '../repositories/goalRepository';
 import { useNutritionStore } from '../store/useNutritionStore';
 import type { DailyGoal } from '../types';
+import { GoalRecommendation } from './GoalRecommendation';
 import './GoalSettings.css';
 
 const labels: Record<keyof DailyGoal, string> = {
@@ -90,8 +91,9 @@ export function GoalSettings() {
       <div className="settings-heading">
         <p className="eyebrow">营养计划</p>
         <h1>训练日和休息日目标</h1>
-        <p>分别设置两种日程的热量与三大营养素，切换日程时首页目标会自动更新。</p>
+        <p>先用个人资料生成起点建议，再根据体重趋势、训练表现和实际感受手动调整。</p>
       </div>
+      <GoalRecommendation />
       <div className="goal-grid">
         <GoalForm dayType="training" title="训练日目标" />
         <GoalForm dayType="rest" title="休息日目标" />
