@@ -5,6 +5,7 @@ import { isTauriRuntime } from './database/client';
 import { initializeDatabase } from './database/migrations';
 import { seedDatabase } from './database/seed';
 import { useNutritionStore } from './store/useNutritionStore';
+import './hardening.css';
 
 async function bootstrap(): Promise<void> {
   try {
