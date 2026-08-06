@@ -3,7 +3,7 @@ import { getDatabase, isTauriRuntime } from '../database/client';
 import { seedDatabase } from '../database/seed';
 import { bodyRecordRepository, type BodyRecord } from '../repositories/bodyRecordRepository';
 import { dayPlanRepository, type DailyPlan } from '../repositories/dayPlanRepository';
-import { foodRepository, type Food } from '../repositories/foodRepository';
+import { foodRepository, type Food, type FoodCategory } from '../repositories/foodRepository';
 import { goalRepository } from '../repositories/goalRepository';
 import type { MealEntry } from '../repositories/mealRepository';
 import { defaultGoalProfile, userProfileRepository } from '../repositories/userProfileRepository';
@@ -14,7 +14,7 @@ import { calculateGoalRecommendation, type GoalProfile } from '../utils/goalCalc
 export interface FuelLogBackup {
   format: 'fuellog-backup';
   version: 1;
-  appVersion: '0.3.0';
+  appVersion: string;
   exportedAt: string;
   data: {
     foods: Food[];
@@ -43,6 +43,17 @@ type MealRow = {
 };
 
 const mealTypes = new Set<MealType>(['早餐', '午餐', '晚餐', '加餐']);
+const foodCategories = new Set<FoodCategory>([
+  '蛋白质来源',
+  '主食',
+  '水果',
+  '蔬菜',
+  '乳制品',
+  '坚果',
+  '补剂',
+  '常见外食',
+  '其他',
+]);
 const MAX_BACKUP_ROWS = 100_000;
 
 function mapMealRow(row: MealRow): MealEntry {
@@ -63,138 +74,218 @@ function mapMealRow(row: MealRow): MealEntry {
   };
 }
 
-function assertObject(value: unknown, label: string): asserts value is Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label}格式无效`);
+function asRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label}格式无效`);
+  }
+  return value as Record<string, unknown>;
 }
 
-function assertText(value: unknown, label: string): asserts value is string {
+function asArray(value: unknown, label: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`备份文件缺少${label}数据`);
+  if (value.length > MAX_BACKUP_ROWS) throw new Error(`${label}数据超过允许的 ${MAX_BACKUP_ROWS} 条`);
+  return value;
+}
+
+function readText(value: unknown, label: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${label}不能为空`);
+  return value;
 }
 
-function assertNumber(value: unknown, label: string, minimum = 0): asserts value is number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum) throw new Error(`${label}数值无效`);
+function readNumber(value: unknown, label: string, minimum = 0): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum) {
+    throw new Error(`${label}数值无效`);
+  }
+  return value;
 }
 
-function assertTimestamp(value: unknown, label: string): asserts value is string {
-  assertText(value, label);
-  if (Number.isNaN(new Date(value).getTime())) throw new Error(`${label}时间无效`);
+function readInteger(value: unknown, label: string, minimum = 0): number {
+  const number = readNumber(value, label, minimum);
+  if (!Number.isInteger(number)) throw new Error(`${label}必须为整数`);
+  return number;
+}
+
+function readBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== 'boolean') throw new Error(`${label}标记无效`);
+  return value;
+}
+
+function readTimestamp(value: unknown, label: string): string {
+  const text = readText(value, label);
+  if (Number.isNaN(new Date(text).getTime())) throw new Error(`${label}时间无效`);
+  return text;
+}
+
+function readNullableNumber(value: unknown, label: string, maximum?: number): number | null {
+  if (value == null) return null;
+  const number = readNumber(value, label);
+  if (maximum != null && number > maximum) throw new Error(`${label}不能超过 ${maximum}`);
+  return number;
+}
+
+function readNullableText(value: unknown, label: string): string | null {
+  if (value == null) return null;
+  if (typeof value !== 'string') throw new Error(`${label}无效`);
+  return value;
 }
 
 function assertUnique(values: string[], label: string): void {
   if (new Set(values).size !== values.length) throw new Error(`${label}包含重复标识`);
 }
 
-function validateGoal(value: unknown, label: string): asserts value is DailyGoal {
-  assertObject(value, label);
-  assertNumber(value.calories, `${label}热量`, 0.1);
-  assertNumber(value.protein, `${label}蛋白质`);
-  assertNumber(value.carbs, `${label}碳水`);
-  assertNumber(value.fat, `${label}脂肪`);
+function parseGoal(value: unknown, label: string): DailyGoal {
+  const record = asRecord(value, label);
+  return {
+    calories: readNumber(record.calories, `${label}热量`, 0.1),
+    protein: readNumber(record.protein, `${label}蛋白质`),
+    carbs: readNumber(record.carbs, `${label}碳水`),
+    fat: readNumber(record.fat, `${label}脂肪`),
+  };
 }
 
-function validateFood(value: unknown, index: number): asserts value is Food {
+function parseFood(value: unknown, index: number): Food {
   const label = `食物第 ${index + 1} 项`;
-  assertObject(value, label);
-  assertText(value.id, `${label} ID`);
-  assertText(value.name, `${label}名称`);
-  assertText(value.category, `${label}分类`);
-  assertNumber(value.baseAmount, `${label}基准数量`, 0.0001);
-  assertText(value.baseUnit, `${label}单位`);
-  assertNumber(value.calories, `${label}热量`);
-  assertNumber(value.protein, `${label}蛋白质`);
-  assertNumber(value.carbs, `${label}碳水`);
-  assertNumber(value.fat, `${label}脂肪`);
-  if (typeof value.isFavorite !== 'boolean' || typeof value.isCustom !== 'boolean') throw new Error(`${label}标记无效`);
-  assertNumber(value.usageCount, `${label}使用次数`);
-  assertTimestamp(value.createdAt, `${label}创建`);
-  assertTimestamp(value.updatedAt, `${label}更新`);
+  const record = asRecord(value, label);
+  const category = readText(record.category, `${label}分类`);
+  if (!foodCategories.has(category as FoodCategory)) throw new Error(`${label}分类无效`);
+
+  return {
+    id: readText(record.id, `${label} ID`),
+    name: readText(record.name, `${label}名称`),
+    category: category as FoodCategory,
+    baseAmount: readNumber(record.baseAmount, `${label}基准数量`, 0.0001),
+    baseUnit: readText(record.baseUnit, `${label}单位`),
+    calories: readNumber(record.calories, `${label}热量`),
+    protein: readNumber(record.protein, `${label}蛋白质`),
+    carbs: readNumber(record.carbs, `${label}碳水`),
+    fat: readNumber(record.fat, `${label}脂肪`),
+    isFavorite: readBoolean(record.isFavorite, `${label}收藏`),
+    isCustom: readBoolean(record.isCustom, `${label}自定义`),
+    usageCount: readInteger(record.usageCount, `${label}使用次数`),
+    createdAt: readTimestamp(record.createdAt, `${label}创建`),
+    updatedAt: readTimestamp(record.updatedAt, `${label}更新`),
+  };
 }
 
-function validateMeal(value: unknown, index: number, foodIds: Set<string>): asserts value is MealEntry {
+function parseMeal(value: unknown, index: number, foodIds: Set<string>): MealEntry {
   const label = `饮食第 ${index + 1} 项`;
-  assertObject(value, label);
-  assertText(value.id, `${label} ID`);
-  if (value.foodId != null && (typeof value.foodId !== 'string' || !foodIds.has(value.foodId))) {
-    throw new Error(`${label}引用了不存在的食物`);
+  const record = asRecord(value, label);
+  const mealType = readText(record.mealType, `${label}餐次`);
+  if (!mealTypes.has(mealType as MealType)) throw new Error(`${label}餐次无效`);
+
+  let foodId: string | null = null;
+  if (record.foodId != null) {
+    foodId = readText(record.foodId, `${label}食物 ID`);
+    if (!foodIds.has(foodId)) throw new Error(`${label}引用了不存在的食物`);
   }
-  assertText(value.foodName, `${label}名称`);
-  if (!mealTypes.has(value.mealType as MealType)) throw new Error(`${label}餐次无效`);
-  assertTimestamp(value.consumedAt, `${label}食用`);
-  assertNumber(value.amount, `${label}数量`, 0.0001);
-  assertText(value.unit, `${label}单位`);
-  assertNumber(value.calories, `${label}热量`);
-  assertNumber(value.protein, `${label}蛋白质`);
-  assertNumber(value.carbs, `${label}碳水`);
-  assertNumber(value.fat, `${label}脂肪`);
-  assertTimestamp(value.createdAt, `${label}创建`);
-  assertTimestamp(value.updatedAt, `${label}更新`);
+
+  return {
+    id: readText(record.id, `${label} ID`),
+    foodId,
+    foodName: readText(record.foodName, `${label}名称`),
+    mealType: mealType as MealType,
+    consumedAt: readTimestamp(record.consumedAt, `${label}食用`),
+    amount: readNumber(record.amount, `${label}数量`, 0.0001),
+    unit: readText(record.unit, `${label}单位`),
+    calories: readNumber(record.calories, `${label}热量`),
+    protein: readNumber(record.protein, `${label}蛋白质`),
+    carbs: readNumber(record.carbs, `${label}碳水`),
+    fat: readNumber(record.fat, `${label}脂肪`),
+    createdAt: readTimestamp(record.createdAt, `${label}创建`),
+    updatedAt: readTimestamp(record.updatedAt, `${label}更新`),
+  };
 }
 
-function validateBodyRecord(value: unknown, index: number): asserts value is BodyRecord {
+function parseBodyRecord(value: unknown, index: number): BodyRecord {
   const label = `身体数据第 ${index + 1} 项`;
-  assertObject(value, label);
-  assertText(value.id, `${label} ID`);
-  assertText(value.recordedDate, `${label}日期`);
-  assertDateKey(value.recordedDate, `${label}日期无效`);
-  assertNumber(value.weight, `${label}体重`, 0.0001);
-  if (value.bodyFat != null) {
-    assertNumber(value.bodyFat, `${label}体脂率`);
-    if (value.bodyFat > 100) throw new Error(`${label}体脂率不能超过 100`);
-  }
-  if (value.muscleMass != null) assertNumber(value.muscleMass, `${label}肌肉量`);
-  if (value.waist != null) assertNumber(value.waist, `${label}腰围`);
-  if (value.note != null && typeof value.note !== 'string') throw new Error(`${label}备注无效`);
-  assertTimestamp(value.createdAt, `${label}创建`);
-  assertTimestamp(value.updatedAt, `${label}更新`);
+  const record = asRecord(value, label);
+  const recordedDate = readText(record.recordedDate, `${label}日期`);
+  assertDateKey(recordedDate, `${label}日期无效`);
+
+  return {
+    id: readText(record.id, `${label} ID`),
+    recordedDate,
+    weight: readNumber(record.weight, `${label}体重`, 0.0001),
+    bodyFat: readNullableNumber(record.bodyFat, `${label}体脂率`, 100),
+    muscleMass: readNullableNumber(record.muscleMass, `${label}肌肉量`),
+    waist: readNullableNumber(record.waist, `${label}腰围`),
+    note: readNullableText(record.note, `${label}备注`),
+    createdAt: readTimestamp(record.createdAt, `${label}创建`),
+    updatedAt: readTimestamp(record.updatedAt, `${label}更新`),
+  };
 }
 
-function validatePlan(value: unknown, index: number): asserts value is DailyPlan {
+function parsePlan(value: unknown, index: number): DailyPlan {
   const label = `每日计划第 ${index + 1} 项`;
-  assertObject(value, label);
-  assertText(value.date, `${label}日期`);
-  assertDateKey(value.date, `${label}日期无效`);
-  if (value.dayType !== 'training' && value.dayType !== 'rest') throw new Error(`${label}日程类型无效`);
-  validateGoal(value.goal, `${label}目标`);
-  assertTimestamp(value.updatedAt, `${label}更新`);
+  const record = asRecord(value, label);
+  const date = readText(record.date, `${label}日期`);
+  assertDateKey(date, `${label}日期无效`);
+  if (record.dayType !== 'training' && record.dayType !== 'rest') throw new Error(`${label}日程类型无效`);
+
+  return {
+    date,
+    dayType: record.dayType,
+    goal: parseGoal(record.goal, `${label}目标`),
+    updatedAt: readTimestamp(record.updatedAt, `${label}更新`),
+  };
 }
 
-function validateProfile(value: unknown): asserts value is GoalProfile {
-  assertObject(value, '个人资料');
-  calculateGoalRecommendation(value as unknown as GoalProfile);
+function parseProfile(value: unknown): GoalProfile {
+  const record = asRecord(value, '个人资料');
+  const sex = readText(record.sex, '个人资料性别');
+  const activityLevel = readText(record.activityLevel, '个人资料活动量');
+  const objective = readText(record.objective, '个人资料目标');
+  if (sex !== 'male' && sex !== 'female') throw new Error('个人资料性别无效');
+  if (!['sedentary', 'light', 'moderate', 'high'].includes(activityLevel)) throw new Error('个人资料活动量无效');
+  if (!['cut', 'maintain', 'gain'].includes(objective)) throw new Error('个人资料目标无效');
+
+  const profile: GoalProfile = {
+    sex,
+    age: readInteger(record.age, '个人资料年龄'),
+    heightCm: readNumber(record.heightCm, '个人资料身高'),
+    weightKg: readNumber(record.weightKg, '个人资料体重'),
+    activityLevel: activityLevel as GoalProfile['activityLevel'],
+    objective: objective as GoalProfile['objective'],
+  };
+  calculateGoalRecommendation(profile);
+  return profile;
 }
 
 function validateBackup(value: unknown): FuelLogBackup {
-  assertObject(value, '备份文件');
-  if (value.format !== 'fuellog-backup' || value.version !== 1) throw new Error('不是受支持的 FuelLog 备份文件');
-  assertTimestamp(value.exportedAt, '备份导出');
-  assertObject(value.data, '备份数据');
-  const data = value.data;
-  for (const [label, rows] of [
-    ['食物', data.foods],
-    ['饮食', data.meals],
-    ['身体数据', data.bodyRecords],
-    ['每日计划', data.dailyPlans],
-  ] as const) {
-    if (!Array.isArray(rows)) throw new Error(`备份文件缺少${label}数据`);
-    if (rows.length > MAX_BACKUP_ROWS) throw new Error(`${label}数据超过允许的 ${MAX_BACKUP_ROWS} 条`);
+  const root = asRecord(value, '备份文件');
+  if (root.format !== 'fuellog-backup' || root.version !== 1) {
+    throw new Error('不是受支持的 FuelLog 备份文件');
   }
-  assertObject(data.goals, '营养目标');
-  validateGoal(data.goals.training, '训练日目标');
-  validateGoal(data.goals.rest, '休息日目标');
 
-  data.foods.forEach(validateFood);
-  assertUnique(data.foods.map((food) => food.id), '食物数据');
-  const foodIds = new Set(data.foods.map((food) => food.id));
-  data.meals.forEach((meal, index) => validateMeal(meal, index, foodIds));
-  assertUnique(data.meals.map((meal) => meal.id), '饮食数据');
-  data.bodyRecords.forEach(validateBodyRecord);
-  assertUnique(data.bodyRecords.map((record) => record.id), '身体数据');
-  assertUnique(data.bodyRecords.map((record) => record.recordedDate), '身体日期');
-  data.dailyPlans.forEach(validatePlan);
-  assertUnique(data.dailyPlans.map((plan) => plan.date), '每日计划');
-  if (data.profile != null) validateProfile(data.profile);
+  const dataRecord = asRecord(root.data, '备份数据');
+  const foods = asArray(dataRecord.foods, '食物').map(parseFood);
+  assertUnique(foods.map((food) => food.id), '食物数据');
+  const foodIds = new Set(foods.map((food) => food.id));
 
-  return value as unknown as FuelLogBackup;
+  const meals = asArray(dataRecord.meals, '饮食').map((meal, index) => parseMeal(meal, index, foodIds));
+  assertUnique(meals.map((meal) => meal.id), '饮食数据');
+
+  const bodyRecords = asArray(dataRecord.bodyRecords, '身体数据').map(parseBodyRecord);
+  assertUnique(bodyRecords.map((record) => record.id), '身体数据');
+  assertUnique(bodyRecords.map((record) => record.recordedDate), '身体日期');
+
+  const dailyPlans = asArray(dataRecord.dailyPlans, '每日计划').map(parsePlan);
+  assertUnique(dailyPlans.map((plan) => plan.date), '每日计划');
+
+  const goalsRecord = asRecord(dataRecord.goals, '营养目标');
+  const goals = {
+    training: parseGoal(goalsRecord.training, '训练日目标'),
+    rest: parseGoal(goalsRecord.rest, '休息日目标'),
+  };
+  const profile = dataRecord.profile == null ? undefined : parseProfile(dataRecord.profile);
+
+  return {
+    format: 'fuellog-backup',
+    version: 1,
+    appVersion: readText(root.appVersion, '应用版本'),
+    exportedAt: readTimestamp(root.exportedAt, '备份导出'),
+    data: { foods, meals, goals, bodyRecords, dailyPlans, profile },
+  };
 }
 
 async function readMeals(): Promise<MealEntry[]> {
