@@ -17,6 +17,7 @@ interface State {
   loadDate: (date: string) => Promise<void>;
   loadGoal: () => Promise<void>;
   saveGoal: (dayType: DayType, goal: DailyGoal) => Promise<void>;
+  applyGoals: (training: DailyGoal, rest: DailyGoal) => Promise<string | null>;
   addFood: (food: FoodEntry) => Promise<void>;
   updateFood: (id: string, food: FoodEntry) => Promise<void>;
   removeFood: (id: string) => Promise<FoodEntry>;
@@ -153,8 +154,32 @@ export const useNutritionStore = create<State>()(
             set({ goal, error: null });
           }
         } catch (error) {
-          set({ error: describeError(error, '保存营养目标失败') });
-          throw error;
+          const message = describeError(error, '保存营养目标失败');
+          set({ error: message });
+          throw new Error(message);
+        }
+      },
+
+      applyGoals: async (training, rest) => {
+        set({ error: null });
+        try {
+          await goalRepository.saveBoth(training, rest);
+          const state = get();
+          const dayType: DayType = state.trainingDay ? 'training' : 'rest';
+          const activeGoal = dayType === 'training' ? training : rest;
+          let warning: string | null = null;
+          try {
+            await dayPlanRepository.save(state.selectedDate, dayType, activeGoal);
+          } catch (syncError) {
+            warning = describeError(syncError, '当天目标快照同步失败');
+            console.warn('两套目标已保存，但当天目标快照同步失败', syncError);
+          }
+          set({ goal: activeGoal, error: null });
+          return warning;
+        } catch (error) {
+          const message = describeError(error, '应用营养建议失败');
+          set({ error: message });
+          throw new Error(message);
         }
       },
 
