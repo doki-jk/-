@@ -46,7 +46,7 @@ jobs:
         run: npx tauri icon src-tauri/icons/icon.svg
 
       - name: Build Windows installers
-        run: npx tauri build --bundles nsis,msi --locked
+        run: npx tauri build --bundles nsis,msi -- --locked
 
       - name: Upload Windows installers
         uses: actions/upload-artifact@v6
