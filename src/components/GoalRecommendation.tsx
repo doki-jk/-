@@ -80,12 +80,16 @@ export function GoalRecommendation({ onApplied }: GoalRecommendationProps) {
   }
 
   async function applyRecommendation() {
-    if (!recommendation) return;
+    if (!recommendation || saving) return;
     setSaving(true);
-    setMessage('');
+    setMessage('正在保存训练日和休息日目标…');
     try {
       const warning = await applyGoals(recommendation.training, recommendation.rest);
-      onApplied?.();
+      try {
+        onApplied?.();
+      } catch (refreshError) {
+        console.error('目标已保存，但刷新目标表单失败', refreshError);
+      }
       setMessage(warning
         ? `两种目标已保存，但当天目标同步出现警告：${warning}`
         : '建议已应用到训练日和休息日目标。你仍可在下方手动调整。');
@@ -142,12 +146,20 @@ export function GoalRecommendation({ onApplied }: GoalRecommendationProps) {
             <div><strong>训练日</strong><span>蛋白质 {recommendation.training.protein}g · 碳水 {recommendation.training.carbs}g · 脂肪 {recommendation.training.fat}g</span></div>
             <div><strong>休息日</strong><span>蛋白质 {recommendation.rest.protein}g · 碳水 {recommendation.rest.carbs}g · 脂肪 {recommendation.rest.fat}g</span></div>
           </div>
-          <button className="primary" type="button" disabled={saving} onClick={() => void applyRecommendation()}><Save size={16} />{saving ? '应用中…' : '应用到两种目标'}</button>
+          <button
+            className="primary"
+            type="button"
+            disabled={saving}
+            aria-busy={saving}
+            onClick={() => void applyRecommendation()}
+          >
+            <Save size={16} />{saving ? '应用中…' : '应用到两种目标'}
+          </button>
         </>
       )}
 
+      {message && <p className="data-status" role="status" aria-live="polite">{message}</p>}
       <p className="goal-disclaimer">此结果是基于通用公式的起点估算，不是医疗或营养诊断。连续观察 2–3 周体重、训练表现和饥饿感后再调整。</p>
-      {message && <p className="data-status" role="status">{message}</p>}
     </section>
   );
 }
