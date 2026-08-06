@@ -22,10 +22,17 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Enforce dependency security
+        run: npm audit --audit-level=high
+
+      - name: Run regression tests
+        run: npm run test:run
 
       - name: Build web application
         run: npm run build -- --mode pages
