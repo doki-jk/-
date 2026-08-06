@@ -1,0 +1,76 @@
+.data-management-page {
+  display: grid;
+  gap: 22px;
+}
+
+.data-management-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.data-management-card {
+  display: flex;
+  min-height: 260px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.data-management-card h2 {
+  margin: 0 0 8px;
+}
+
+.data-management-card p {
+  margin: 0;
+  color: var(--muted, #94a3b8);
+  line-height: 1.65;
+}
+
+.data-management-card button {
+  width: 100%;
+  justify-content: center;
+  margin-top: auto;
+}
+
+.data-management-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.danger-card .data-management-icon {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.data-safety-note {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.data-safety-note div {
+  display: grid;
+  gap: 4px;
+}
+
+.data-safety-note span {
+  color: var(--muted, #94a3b8);
+}
+
+@media (max-width: 980px) {
+  .data-management-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .data-management-card {
+    min-height: 0;
+  }
+}
