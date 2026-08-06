@@ -1,6 +1,7 @@
 import { Calculator, LockKeyhole, UnlockKeyhole, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Food } from '../repositories/foodRepository';
+import { useNutritionStore } from '../store/useNutritionStore';
 import type { FoodEntry, MealType } from '../types';
 import { localDateFromKey } from '../utils/date';
 import { isValidNutrition, scaleNutrition, type NutritionValues } from '../utils/nutrition';
@@ -9,7 +10,6 @@ const meals: MealType[] = ['早餐', '午餐', '晚餐', '加餐'];
 
 interface FoodEntryModalProps {
   open: boolean;
-  selectedDate: string;
   recordLabel: string;
   selectedMeal: MealType;
   sourceFood: Food | null;
@@ -31,7 +31,6 @@ function currentTimeValue(date = new Date()): string {
 
 export function FoodEntryModal({
   open,
-  selectedDate,
   recordLabel,
   selectedMeal,
   sourceFood,
@@ -42,6 +41,7 @@ export function FoodEntryModal({
   onMealChange,
   onSubmit,
 }: FoodEntryModalProps) {
+  const selectedDate = useNutritionStore((state) => state.selectedDate);
   const [name, setName] = useState('');
   const [time, setTime] = useState(currentTimeValue());
   const [amount, setAmount] = useState(100);
