@@ -59,10 +59,12 @@ export function GoalRecommendation() {
 
   async function calculate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const currentProfile = profile;
+    if (!currentProfile) return;
     setMessage('');
     try {
-      const value = calculateGoalRecommendation(profile);
-      await userProfileRepository.save(profile);
+      const value = calculateGoalRecommendation(currentProfile);
+      await userProfileRepository.save(currentProfile);
       setRecommendation(value);
       setMessage('建议已重新计算并保存个人资料。');
     } catch (error) {
