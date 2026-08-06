@@ -6,7 +6,12 @@ vi.mock('../repositories/foodRepository', () => ({
   },
 }));
 
-import { recognizeFoodText } from './foodRecognition';
+import {
+  confirmFoodSuggestion,
+  recognizeFoodBatchText,
+  recognizeFoodText,
+  splitFoodDescriptions,
+} from './foodRecognition';
 
 describe('recognizeFoodText', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -30,5 +35,36 @@ describe('recognizeFoodText', () => {
     const response = await recognizeFoodText('一份火星能量块');
     expect(response.result).toBeNull();
     expect(response.error).toContain('无法可靠匹配');
+  });
+
+  it('lets the user confirm a candidate without changing the parsed amount', async () => {
+    const response = await recognizeFoodText('200g鸡胸');
+    const candidate = response.suggestions.find((item) => item.food.name === '鸡胸肉');
+    expect(candidate).toBeDefined();
+    const confirmed = await confirmFoodSuggestion('200g鸡胸', candidate!.food);
+    expect(confirmed.food.name).toBe('鸡胸肉');
+    expect(confirmed.amount).toBe(200);
+    expect(confirmed.confidence).toBeGreaterThanOrEqual(80);
+  });
+});
+
+describe('multi-food recognition', () => {
+  it('splits common Chinese separators without duplicating items', () => {
+    expect(splitFoodDescriptions('200g鸡胸肉 + 一碗米饭和2个鸡蛋')).toEqual([
+      '200g鸡胸肉',
+      '一碗米饭',
+      '2个鸡蛋',
+    ]);
+  });
+
+  it('recognizes multiple foods independently', async () => {
+    const response = await recognizeFoodBatchText('200g鸡胸肉、一碗米饭、2个鸡蛋');
+    expect(response.isBatch).toBe(true);
+    expect(response.items).toHaveLength(3);
+    expect(response.items.map((item) => item.response.result?.food.name)).toEqual([
+      '鸡胸肉',
+      '熟米饭',
+      '鸡蛋',
+    ]);
   });
 });
