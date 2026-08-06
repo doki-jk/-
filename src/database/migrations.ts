@@ -77,6 +77,22 @@ const migrations: Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_meal_entries_date ON meal_entries(consumed_at)`,
       `CREATE INDEX IF NOT EXISTS idx_meal_entries_type ON meal_entries(meal_type)`
     ]
+  },
+  {
+    version: 2,
+    name: 'daily_plan_snapshots',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS daily_plans (
+        date TEXT PRIMARY KEY,
+        day_type TEXT NOT NULL CHECK(day_type IN ('training','rest')),
+        calories REAL NOT NULL CHECK(calories > 0),
+        protein REAL NOT NULL CHECK(protein >= 0),
+        carbs REAL NOT NULL CHECK(carbs >= 0),
+        fat REAL NOT NULL CHECK(fat >= 0),
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_daily_plans_type ON daily_plans(day_type)`
+    ]
   }
 ];
 
