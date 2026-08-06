@@ -68,6 +68,13 @@ export const dayPlanRepository = {
     return rows[0] ? mapRow(rows[0]) : null;
   },
 
+  async getAll(): Promise<DailyPlan[]> {
+    if (!isTauriRuntime()) return Object.values(browserPlans()).sort((left, right) => left.date.localeCompare(right.date));
+    const db = await getDatabase();
+    const rows = await db.select<DailyPlanRow[]>('SELECT * FROM daily_plans ORDER BY date ASC');
+    return rows.map(mapRow);
+  },
+
   async save(date: string, dayType: DayType, goal: DailyGoal): Promise<DailyPlan> {
     assertDate(date);
     validateGoal(goal);
