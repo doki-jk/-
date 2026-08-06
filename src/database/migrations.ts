@@ -119,24 +119,18 @@ const migrations: Migration[] = [
 ];
 
 async function applyMigration(db: Database, migration: Migration): Promise<void> {
-  await db.execute('BEGIN IMMEDIATE');
-  try {
-    for (const statement of migration.statements) {
-      await db.execute(statement);
-    }
-    await db.execute(
-      'INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)',
-      [migration.version, migration.name, new Date().toISOString()]
-    );
-    await db.execute('COMMIT');
-  } catch (error) {
-    try {
-      await db.execute('ROLLBACK');
-    } catch (rollbackError) {
-      console.error('数据库迁移回滚失败', rollbackError);
-    }
-    throw error;
+  // Do not emulate a transaction with separate BEGIN/COMMIT plugin calls.
+  // Tauri SQL executes each call through a pool, so those calls are not
+  // guaranteed to use the same connection and can leave SQLite locked.
+  // These DDL statements are idempotent; the version marker is written only
+  // after every statement succeeds, so an interrupted migration is retried.
+  for (const statement of migration.statements) {
+    await db.execute(statement);
   }
+  await db.execute(
+    'INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)',
+    [migration.version, migration.name, new Date().toISOString()]
+  );
 }
 
 async function ensureColumn(
