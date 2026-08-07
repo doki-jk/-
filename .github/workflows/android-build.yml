@@ -1,14 +1,9 @@
 name: Android Debug Build
 
+# Mobile development is paused. Keep this workflow available for explicit,
+# manual validation only; do not build or upload Android artifacts on PRs.
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
-      - 'src/**'
-      - 'src-tauri/**'
-      - '.github/workflows/android-build.yml'
 
 permissions:
   contents: read
