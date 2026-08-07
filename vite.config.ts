@@ -1,7 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const mobileDevHost = process.env.TAURI_DEV_HOST;
+const mobileDevHost = (
+  globalThis as typeof globalThis & {
+    process?: { env?: Record<string, string | undefined> };
+  }
+).process?.env?.TAURI_DEV_HOST;
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
