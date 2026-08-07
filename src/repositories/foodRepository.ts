@@ -1,6 +1,7 @@
 import { FOOD_CATALOG, type CatalogFoodCategory } from '../data/foodCatalog';
-import { createLocalId, readBrowserData, writeBrowserData } from '../database/browserStorage';
+import { createLocalId, readBrowserData, writeBrowserData, writeBrowserDataBatch } from '../database/browserStorage';
 import { getDatabase, isTauriRuntime } from '../database/client';
+import type { MealEntry } from './mealRepository';
 
 export type FoodCategory = CatalogFoodCategory;
 
@@ -290,7 +291,15 @@ export const foodRepository = {
 
   async remove(id: string): Promise<void> {
     if (!isTauriRuntime()) {
-      writeBrowserData('foods', browserFoods().filter((food) => food.id !== id || !food.isCustom));
+      const foods = browserFoods();
+      const target = foods.find((food) => food.id === id);
+      if (!target?.isCustom) return;
+
+      const meals = readBrowserData<MealEntry[]>('meal-entries', []);
+      writeBrowserDataBatch({
+        foods: foods.filter((food) => food.id !== id),
+        'meal-entries': meals.map((meal) => meal.foodId === id ? { ...meal, foodId: null } : meal),
+      });
       return;
     }
 

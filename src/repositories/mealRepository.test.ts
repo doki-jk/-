@@ -51,4 +51,38 @@ describe('mealRepository browser persistence', () => {
     await mealRepository.remove(saved.id);
     expect(await mealRepository.getByDate('2026-08-06')).toHaveLength(0);
   });
+
+  it('clears historical meal links when a custom food is deleted', async () => {
+    const customFood = await foodRepository.create({
+      name: '自定义测试食物',
+      category: '其他',
+      baseAmount: 100,
+      baseUnit: 'g',
+      calories: 120,
+      protein: 10,
+      carbs: 12,
+      fat: 3,
+    });
+
+    await mealRepository.add({
+      foodId: customFood.id,
+      foodName: customFood.name,
+      mealType: '午餐',
+      consumedAt: '2026-08-06T12:00:00.000Z',
+      amount: 100,
+      unit: 'g',
+      calories: 120,
+      protein: 10,
+      carbs: 12,
+      fat: 3,
+    }, { trackUsage: false });
+
+    await foodRepository.remove(customFood.id);
+
+    expect((await foodRepository.getAll()).some((food) => food.id === customFood.id)).toBe(false);
+    const meals = await mealRepository.getByDate('2026-08-06');
+    expect(meals).toHaveLength(1);
+    expect(meals[0].foodId).toBeNull();
+    expect(meals[0].foodName).toBe('自定义测试食物');
+  });
 });
