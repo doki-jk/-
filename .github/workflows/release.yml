@@ -33,6 +33,15 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
 
+      - name: Verify release tag matches application version
+        shell: pwsh
+        run: |
+          $config = Get-Content 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
+          $expectedTag = "v$($config.version)"
+          if ($env:RELEASE_TAG -ne $expectedTag) {
+            throw "Release tag $($env:RELEASE_TAG) does not match application version $($config.version); expected $expectedTag"
+          }
+
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
