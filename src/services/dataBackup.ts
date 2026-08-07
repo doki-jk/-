@@ -1,6 +1,5 @@
 import { readBrowserData, writeBrowserDataBatch } from '../database/browserStorage';
 import { getDatabase, isTauriRuntime } from '../database/client';
-import { seedDatabase } from '../database/seed';
 import { bodyRecordRepository, type BodyRecord } from '../repositories/bodyRecordRepository';
 import { dayPlanRepository, type DailyPlan } from '../repositories/dayPlanRepository';
 import { foodRepository, type Food, type FoodCategory } from '../repositories/foodRepository';
@@ -398,8 +397,6 @@ export async function restoreFuelLogBackup(input: unknown): Promise<void> {
     await db.execute('ROLLBACK');
     throw error;
   }
-
-  await seedDatabase();
 }
 
 function csvCell(value: unknown): string {
