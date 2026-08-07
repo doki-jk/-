@@ -10,7 +10,13 @@
     "test": "vitest",
     "test:run": "vitest run",
     "check": "npm run test:run && npm run build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:android:init": "tauri android init",
+    "tauri:android:dev": "tauri android dev",
+    "tauri:android:build": "tauri android build",
+    "tauri:ios:init": "tauri ios init",
+    "tauri:ios:dev": "tauri ios dev",
+    "tauri:ios:build": "tauri ios build"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
