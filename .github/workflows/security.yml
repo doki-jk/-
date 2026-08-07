@@ -40,6 +40,8 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
       - name: Install RustSec cargo-audit
         run: cargo install cargo-audit --locked
       - name: Audit Rust dependencies
