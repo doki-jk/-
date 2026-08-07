@@ -84,6 +84,13 @@ jobs:
         with:
           workspaces: src-tauri -> target
 
+      - name: Install RustSec cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Enforce Rust dependency security
+        working-directory: src-tauri
+        run: cargo audit
+
       - name: Check Tauri backend
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml
 
