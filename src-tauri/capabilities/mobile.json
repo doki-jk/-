@@ -1,0 +1,1 @@
+{"$schema":"../gen/schemas/mobile-schema.json","identifier":"mobile","description":"Android permissions for the main FuelLog webview","windows":["main"],"platforms":["android"],"permissions":["core:default","sql:allow-load","sql:allow-select","sql:allow-execute"]}
