@@ -25,8 +25,8 @@ export interface FoodCatalogEntry {
 
 // Values are generic reference estimates. Prepared foods, brands and cooking methods can vary substantially.
 export const FOOD_CATALOG: FoodCatalogEntry[] = [
-  { id: 'seed-chicken-breast', name: '鸡胸肉', category: '蛋白质来源', baseAmount: 100, baseUnit: 'g', calories: 165, protein: 31, carbs: 0, fat: 3.6, aliases: ['鸡胸', '鸡胸脯', '水煮鸡胸', '煎鸡胸', '雞胸肉', '雞胸'] , portions: { 块: 150, 份: 150 } },
-  { id: 'seed-chicken-thigh', name: '去皮鸡腿肉', category: '蛋白质来源', baseAmount: 100, baseUnit: 'g', calories: 177, protein: 24, carbs: 0, fat: 8, aliases: ['鸡腿肉', '去皮鸡腿', '鸡腿', '雞腿肉', '去皮雞腿', '雞腿'], portions: { 块: 120, 份: 150 } },
+  { id: 'seed-chicken-breast', name: '鸡胸肉', category: '蛋白质来源', baseAmount: 100, baseUnit: 'g', calories: 165, protein: 31, carbs: 0, fat: 3.6, aliases: ['鸡胸', '鸡胸脯', '水煮鸡胸', '煎鸡胸', '雞胸肉', '雞胸'], portions: { 块: 150, 份: 150 } },
+  { id: 'seed-chicken-thigh', name: '去皮鸡腿肉', category: '蛋白质来源', baseAmount: 100, baseUnit: 'g', calories: 177, protein: 24, carbs: 0, fat: 8, aliases: ['鸡腿肉', '去皮鸡腿', '鸡腿', '雞腿肉', '去皮雞腿', '雞腿'], portions: { 块: 120, 只: 120, 份: 150 } },
   { id: 'seed-egg', name: '鸡蛋', category: '蛋白质来源', baseAmount: 1, baseUnit: '个', calories: 70, protein: 6.3, carbs: 0.6, fat: 4.8, aliases: ['全蛋', '水煮蛋', '煎蛋', '蛋', '雞蛋'] },
   { id: 'seed-egg-white', name: '蛋白', category: '蛋白质来源', baseAmount: 1, baseUnit: '个', calories: 17, protein: 3.6, carbs: 0.2, fat: 0, aliases: ['鸡蛋白', '蛋清', '雞蛋白', '蛋白液'] },
   { id: 'seed-beef', name: '瘦牛肉', category: '蛋白质来源', baseAmount: 100, baseUnit: 'g', calories: 250, protein: 26, carbs: 0, fat: 15, aliases: ['牛肉', '牛里脊', '瘦牛排'], portions: { 块: 150, 份: 150 } },
