@@ -1,5 +1,6 @@
 import { ArchiveRestore, DatabaseBackup, Download, FileSpreadsheet, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { isTauriRuntime } from '../database/client';
 import {
   createFuelLogBackup,
   createMealsCsv,
@@ -7,6 +8,10 @@ import {
   restoreFuelLogBackup,
 } from '../services/dataBackup';
 import { assertBackupFileSize } from '../services/backupFileLimits';
+import {
+  assertBackupRestoreRuntimeSafe,
+  NATIVE_RESTORE_DISABLED_MESSAGE,
+} from '../services/backupRestoreSafety';
 import '../data-management.css';
 
 function downloadText(filename: string, text: string, type: string) {
@@ -31,6 +36,7 @@ export function DataManagement() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const nativeRestoreDisabled = isTauriRuntime();
 
   async function exportJson() {
     setBusy(true);
@@ -67,8 +73,9 @@ export function DataManagement() {
     setError('');
     try {
       assertBackupFileSize(file);
-    } catch (sizeError) {
-      setError(sizeError instanceof Error ? sizeError.message : '备份文件大小无效');
+      assertBackupRestoreRuntimeSafe(isTauriRuntime());
+    } catch (safetyError) {
+      setError(safetyError instanceof Error ? safetyError.message : '备份恢复当前不可用');
       if (fileInput.current) fileInput.current.value = '';
       return;
     }
@@ -121,7 +128,7 @@ export function DataManagement() {
           <div className="data-management-icon"><ArchiveRestore size={24} /></div>
           <div>
             <h2>从备份恢复</h2>
-            <p>会覆盖当前设备中的 FuelLog 数据。恢复前应先导出当前完整备份。</p>
+            <p>{nativeRestoreDisabled ? NATIVE_RESTORE_DISABLED_MESSAGE : '会覆盖当前浏览器中的 FuelLog 数据。恢复前应先导出当前完整备份。'}</p>
           </div>
           <input
             ref={fileInput}
@@ -133,13 +140,13 @@ export function DataManagement() {
               if (file) void importFile(file);
             }}
           />
-          <button className="ghost" disabled={busy} onClick={() => fileInput.current?.click()}><Upload size={17} />选择备份文件</button>
+          <button className="ghost" disabled={busy || nativeRestoreDisabled} onClick={() => fileInput.current?.click()}><Upload size={17} />选择备份文件</button>
         </article>
       </div>
 
       <div className="data-safety-note">
         <Upload size={19} />
-        <div><strong>建议每周备份一次</strong><span>网页数据可能因清理站点数据而消失；桌面数据也应在系统重装前导出。</span></div>
+        <div><strong>建议每周备份一次</strong><span>网页数据可能因清理站点数据而消失；桌面和移动应用也应在系统重装或换机前导出。</span></div>
       </div>
     </section>
   );
