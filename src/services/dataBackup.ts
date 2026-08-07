@@ -9,6 +9,7 @@ import { defaultGoalProfile, userProfileRepository } from '../repositories/userP
 import type { DailyGoal, MealType } from '../types';
 import { assertDateKey } from '../utils/date';
 import { calculateGoalRecommendation, type GoalProfile } from '../utils/goalCalculator';
+import { assertBackupRestoreRuntimeSafe } from './backupRestoreSafety';
 
 export interface FuelLogBackup {
   format: 'fuellog-backup';
@@ -315,11 +316,14 @@ export async function createFuelLogBackup(): Promise<FuelLogBackup> {
 }
 
 export async function restoreFuelLogBackup(input: unknown): Promise<void> {
+  const nativeRuntime = isTauriRuntime();
+  assertBackupRestoreRuntimeSafe(nativeRuntime);
+
   const backup = validateBackup(input);
   const { foods, meals, goals, bodyRecords, dailyPlans } = backup.data;
   const profile = backup.data.profile ?? defaultGoalProfile;
 
-  if (!isTauriRuntime()) {
+  if (!nativeRuntime) {
     writeBrowserDataBatch({
       foods,
       'meal-entries': meals,
