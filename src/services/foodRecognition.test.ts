@@ -31,6 +31,29 @@ describe('recognizeFoodText', () => {
     expect(response.result?.nutrition.calories).toBe(140);
   });
 
+  it('recognizes common Traditional Chinese food names', async () => {
+    const response = await recognizeFoodText('兩顆雞蛋');
+    expect(response.error).toBeNull();
+    expect(response.result?.food.name).toBe('鸡蛋');
+    expect(response.result?.amount).toBe(2);
+    expect(response.result?.nutrition.calories).toBe(140);
+  });
+
+  it('recognizes expanded common foods and portion estimates', async () => {
+    const response = await recognizeFoodText('一碗白粥');
+    expect(response.error).toBeNull();
+    expect(response.result?.food.name).toBe('白粥');
+    expect(response.result?.equivalentBaseAmount).toBe(300);
+    expect(response.result?.nutrition.calories).toBe(138);
+  });
+
+  it('recognizes common prepared foods without falling back to unrelated matches', async () => {
+    const response = await recognizeFoodText('一碗牛肉麵');
+    expect(response.error).toBeNull();
+    expect(response.result?.food.name).toBe('牛肉面');
+    expect(response.result?.nutrition.calories).toBe(650);
+  });
+
   it('returns suggestions instead of fabricating an unrelated food', async () => {
     const response = await recognizeFoodText('一份火星能量块');
     expect(response.result).toBeNull();
