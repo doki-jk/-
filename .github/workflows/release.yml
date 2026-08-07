@@ -23,8 +23,6 @@ jobs:
     runs-on: windows-2022
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
@@ -59,8 +57,15 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Audit dependencies
+      - name: Audit npm dependencies
         run: npm audit --audit-level=high
+
+      - name: Install RustSec cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        working-directory: src-tauri
+        run: cargo audit
 
       - name: Run regression tests
         run: npm run test:run
@@ -71,24 +76,32 @@ jobs:
       - name: Build locked Windows installers
         run: npx tauri build --bundles nsis,msi -- --locked
 
-      - name: Sign installers when certificate secrets are configured
+      - name: Sign and verify release installers
         shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) {
-            Write-Host "No Windows signing certificate configured. Installers remain unsigned."
-            exit 0
+            throw "A Windows code-signing certificate is required for public releases"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
+            throw "The Windows code-signing certificate password is required for public releases"
           }
           $certificatePath = Join-Path $env:RUNNER_TEMP "fuellog-signing.pfx"
-          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
-          $installers = Get-ChildItem "src-tauri/target/release/bundle" -Recurse -File | Where-Object { $_.Extension -in '.exe', '.msi' }
-          if ($installers.Count -eq 0) { throw "No installers found to sign" }
-          foreach ($installer in $installers) {
-            & signtool sign /fd SHA256 /td SHA256 /tr https://timestamp.digicert.com /f $certificatePath /p $env:WINDOWS_CERTIFICATE_PASSWORD $installer.FullName
-            if ($LASTEXITCODE -ne 0) { throw "Signing failed for $($installer.FullName)" }
-            & signtool verify /pa /v $installer.FullName
-            if ($LASTEXITCODE -ne 0) { throw "Signature verification failed for $($installer.FullName)" }
+          try {
+            [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+            $installers = Get-ChildItem "src-tauri/target/release/bundle" -Recurse -File | Where-Object { $_.Extension -in '.exe', '.msi' }
+            if ($installers.Count -eq 0) { throw "No installers found to sign" }
+            foreach ($installer in $installers) {
+              & signtool sign /fd SHA256 /td SHA256 /tr https://timestamp.digicert.com /f $certificatePath /p $env:WINDOWS_CERTIFICATE_PASSWORD $installer.FullName
+              if ($LASTEXITCODE -ne 0) { throw "Signing failed for $($installer.FullName)" }
+              & signtool verify /pa /v $installer.FullName
+              if ($LASTEXITCODE -ne 0) { throw "Signature verification failed for $($installer.FullName)" }
+            }
+          } finally {
+            if (Test-Path $certificatePath) { Remove-Item $certificatePath -Force }
           }
-          Remove-Item $certificatePath -Force
 
       - name: Generate SHA-256 checksums
         shell: pwsh
