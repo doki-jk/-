@@ -36,8 +36,15 @@ jobs:
       - name: Install locked frontend dependencies
         run: npm ci
 
-      - name: Enforce dependency security
+      - name: Enforce frontend dependency security
         run: npm audit --audit-level=high
+
+      - name: Install RustSec cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Enforce Rust dependency security
+        working-directory: src-tauri
+        run: cargo audit
 
       - name: Run regression tests
         run: npm run test:run
