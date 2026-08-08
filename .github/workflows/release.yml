@@ -23,15 +23,31 @@ jobs:
     runs-on: windows-2022
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Verify immutable release tag
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "Release tag must use a version format such as v0.3.2"
+          }
+
+          git fetch --force --no-tags origin "refs/tags/$($env:RELEASE_TAG):refs/tags/$($env:RELEASE_TAG)"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag $($env:RELEASE_TAG) does not exist in the remote repository"
+          }
+
+          $tagCommit = (git rev-parse "refs/tags/$($env:RELEASE_TAG)^{commit}").Trim()
+          $headCommit = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $headCommit) {
+            throw "Checked-out commit does not match release tag $($env:RELEASE_TAG)"
+          }
 
       - name: Verify release tag matches application version
         shell: pwsh
@@ -59,8 +75,15 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Audit dependencies
+      - name: Audit npm dependencies
         run: npm audit --audit-level=high
+
+      - name: Install RustSec cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        working-directory: src-tauri
+        run: cargo audit
 
       - name: Run regression tests
         run: npm run test:run
@@ -71,24 +94,35 @@ jobs:
       - name: Build locked Windows installers
         run: npx tauri build --bundles nsis,msi -- --locked
 
-      - name: Sign installers when certificate secrets are configured
+      - name: Sign and verify Windows installers
         shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) {
-            Write-Host "No Windows signing certificate configured. Installers remain unsigned."
-            exit 0
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
+            throw "Windows signing certificate and password are required for a public release"
           }
+
           $certificatePath = Join-Path $env:RUNNER_TEMP "fuellog-signing.pfx"
-          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
-          $installers = Get-ChildItem "src-tauri/target/release/bundle" -Recurse -File | Where-Object { $_.Extension -in '.exe', '.msi' }
-          if ($installers.Count -eq 0) { throw "No installers found to sign" }
-          foreach ($installer in $installers) {
-            & signtool sign /fd SHA256 /td SHA256 /tr https://timestamp.digicert.com /f $certificatePath /p $env:WINDOWS_CERTIFICATE_PASSWORD $installer.FullName
-            if ($LASTEXITCODE -ne 0) { throw "Signing failed for $($installer.FullName)" }
-            & signtool verify /pa /v $installer.FullName
-            if ($LASTEXITCODE -ne 0) { throw "Signature verification failed for $($installer.FullName)" }
+          try {
+            [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+            $installers = @(Get-ChildItem "src-tauri/target/release/bundle" -Recurse -File | Where-Object { $_.Extension -in '.exe', '.msi' })
+            if ($installers.Count -eq 0) { throw "No installers found to sign" }
+
+            foreach ($installer in $installers) {
+              & signtool sign /fd SHA256 /td SHA256 /tr https://timestamp.digicert.com /f $certificatePath /p $env:WINDOWS_CERTIFICATE_PASSWORD $installer.FullName
+              if ($LASTEXITCODE -ne 0) { throw "Signing failed for $($installer.FullName)" }
+              & signtool verify /pa /v $installer.FullName
+              if ($LASTEXITCODE -ne 0) { throw "Signature verification failed for $($installer.FullName)" }
+            }
           }
-          Remove-Item $certificatePath -Force
+          finally {
+            if (Test-Path $certificatePath) {
+              Remove-Item $certificatePath -Force
+            }
+          }
 
       - name: Generate SHA-256 checksums
         shell: pwsh
@@ -103,6 +137,8 @@ jobs:
 
       - name: Create release and upload installers
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $existing = gh release view $env:RELEASE_TAG 2>$null
           if ($LASTEXITCODE -ne 0) {
